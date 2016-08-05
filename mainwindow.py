@@ -40,19 +40,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if err.type() != QSqlError.NoError:
             QMessageBox.critical(self, 'Database error', 'Unable to initialize database: ' + err.text())
 
-        # Set up the SearchAmazon helper
-        self.searchThread = QThread()
-        self.amazon = SearchAmazon()
-        self.amazon.moveToThread(self.searchThread)
-
-        self.amazon.newResultReady.connect(self.processSearchResult)
-        self.amazon.searchMessage.connect(self.searchStatusList.addItem)
-
-        self.searchThread.start()
-
-        self.lastSearchTime = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-
         # Set up the models and views
+        self.initAmazonSearchEngine()
         self.initProductsModelView()
         self.initObsModelView()
         self.initCategoriesDialog()
@@ -86,6 +75,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.showHistoryGraph()
 
         self.startTimer(3600000, Qt.CoarseTimer)
+
+
+    def initAmazonSearchEngine(self):
+        self.searchThread = QThread()
+        self.amazon = SearchAmazon()
+        self.amazon.moveToThread(self.searchThread)
+
+        self.amazon.newResultReady.connect(self.processSearchResult)
+        self.amazon.searchMessage.connect(self.searchStatusList.addItem)
+
+        self.searchThread.start()
+
+        self.lastSearchTime = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
 
 
     def initProductsModelView(self):
