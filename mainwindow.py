@@ -2,8 +2,6 @@ import datetime
 import webbrowser
 import requests
 
-from PyQt5.QtCore import *
-from PyQt5.QtWidgets import *
 from PyQt5.QtChart import *
 from PyQt5.QtGui import *
 
@@ -22,25 +20,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         super(MainWindow, self).__init__(parent)
         self.setupUi(self)
 
-        # Check that the SQLite drive is available
-        if not QSqlDatabase.isDriverAvailable('QSQLITE'):
-            QMessageBox.critical(self, 'Database Error', 'SQLite driver not found.')
-            return
-
-        # Open the database
-        self.database = QSqlDatabase.addDatabase('QSQLITE')
-        self.database.setDatabaseName('products.db')
-        if not self.database.open():
-            QMessageBox.critical(self, 'Database Error',
-                                 'Database could not be opened: ' + self.database.lastError().text())
-            return
-
-        # Initialize the tables and triggers
-        err = initDatabase()
-        if err.type() != QSqlError.NoError:
-            QMessageBox.critical(self, 'Database error', 'Unable to initialize database: ' + err.text())
-
-        # Set up the models and views
+        # Initialize the various components
+        self.initDatabase()
         self.initAmazonSearchEngine()
         self.initProductsModelView()
         self.initObsModelView()
@@ -77,6 +58,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.startTimer(3600000, Qt.CoarseTimer)
 
 
+    def initDatabase(self):
+        # Check that the SQLite drive is available
+        if not QSqlDatabase.isDriverAvailable('QSQLITE'):
+            QMessageBox.critical(self, 'Database Error', 'SQLite driver not found.')
+            return False
+
+        # Open the database
+        self.database = QSqlDatabase.addDatabase('QSQLITE')
+        self.database.setDatabaseName('products.db')
+        if not self.database.open():
+            QMessageBox.critical(self, 'Database Error',
+                                 'Database could not be opened: ' + self.database.lastError().text())
+            return False
+
+        # Initialize the tables and triggers
+        err = setupDatabaseTables()
+        if err.type() != QSqlError.NoError:
+            QMessageBox.critical(self, 'Database error', 'Unable to initialize database: ' + err.text())
+            return False
+
+        return True
+
     def initAmazonSearchEngine(self):
         self.searchThread = QThread()
         self.amazon = SearchAmazon()
@@ -88,7 +91,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.searchThread.start()
 
         self.lastSearchTime = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-
 
     def initProductsModelView(self):
         # Initialize the model
@@ -141,7 +143,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tableView.horizontalHeader().setSectionsMovable(True)
         self.tableView.sortByColumn(self.productsModel.fieldIndex('CRank'), Qt.AscendingOrder)
 
-
     def initObsModelView(self):
         # Initialize the model
         self.obsModel = QSqlRelationalTableModel(self)
@@ -173,7 +174,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.obsTable.setContextMenuPolicy(Qt.CustomContextMenu)
         self.obsTable.customContextMenuRequested.connect(self.chooseHistoryViewMenu)
 
-
     def initCategoriesDialog(self):
         # Set up the models
         groupsModel = QSqlRelationalTableModel(self)
@@ -186,7 +186,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Set up the dialog
         self.categoriesDialog = CategoriesDialog(self, groupsModel, categoriesModel)
         self.categoriesDialog.accepted.connect(self.productsModel.select)
-
 
     def initDataWidgetMapper(self):
         self.mapper = QDataWidgetMapper(self)
@@ -229,7 +228,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.monthlyVolumeBox.valueChanged.connect(self.calculateProfits)
 
         self.mapper.toFirst()
-
 
     def initHistoryChart(self):
         # Get rid of the placeholder put there by Qt Designer
