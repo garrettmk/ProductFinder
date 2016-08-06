@@ -1,6 +1,7 @@
 import datetime
 import webbrowser
 import requests
+import logging
 
 from PyQt5.QtChart import *
 from PyQt5.QtGui import *
@@ -60,21 +61,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def initDatabase(self):
         # Check that the SQLite drive is available
         if not QSqlDatabase.isDriverAvailable('QSQLITE'):
-            QMessageBox.critical(self, 'Database Error', 'SQLite driver not found.')
+            msg = 'SQLite driver not available'
+            logging.critical(msg)
+            QMessageBox.critical(self, 'Database Error', msg)
             return False
 
         # Open the database
         self.database = QSqlDatabase.addDatabase('QSQLITE')
         self.database.setDatabaseName('products.db')
         if not self.database.open():
-            QMessageBox.critical(self, 'Database Error',
-                                 'Database could not be opened: ' + self.database.lastError().text())
+            msg = 'Database could not be opened: ' + self.database.lastError().text()
+            logging.critical(msg)
+            QMessageBox.critical(self, 'Database Error', msg)
             return False
 
         # Initialize the tables and triggers
         err = setupDatabaseTables()
         if err.type() != QSqlError.NoError:
-            QMessageBox.critical(self, 'Database error', 'Unable to initialize database: ' + err.text())
+            msg = 'Unable to initialize database: ' + err.text()
+            logging.critical(msg)
+            QMessageBox.critical(self, 'Database error', msg)
             return False
 
         return True
@@ -651,6 +657,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.obsModel.setFilter("Asin='{}'".format(asin))
         self.obsModel.select()
 
-    def timerEvent(self, QTimerEvent):
+    def timerEvent(self, event):
         self.updateWatched()
         print('Update!')

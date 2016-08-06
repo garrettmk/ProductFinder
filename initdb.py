@@ -1,3 +1,4 @@
+import logging
 from PyQt5.QtSql import *
 
 
@@ -65,6 +66,7 @@ def setupDatabaseTables():
             'END')
 
     if not db.commit():
+        logging.debug('Table setup failed: ' + db.lastError().text())
         db.rollback()
         return db.lastError()
 
