@@ -2,7 +2,7 @@ from PyQt5.QtSql import *
 
 
 def setupDatabaseTables():
-    db =  QSqlDatabase.database()
+    db = QSqlDatabase.database()
     db.transaction()
 
     # Create the tables

@@ -57,7 +57,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.startTimer(3600000, Qt.CoarseTimer)
 
-
     def initDatabase(self):
         # Check that the SQLite drive is available
         if not QSqlDatabase.isDriverAvailable('QSQLITE'):
@@ -95,17 +94,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def initProductsModelView(self):
         # Initialize the model
         self.productsModel = ProductsTableModel(self)
-        self.productsModel.setEditStrategy(QSqlTableModel.OnFieldChange)
-        self.productsModel.setTable('Products')
-
-        # Set up relations
-        self.productsModel.setRelation(self.productsModel.fieldIndex('CategoryId'),
-                                       QSqlRelation('Categories', 'CategoryId', 'CategoryName'))
-        self.productsModel.setRelation(self.productsModel.fieldIndex('ProductGroupId'),
-                                       QSqlRelation('ProductGroups', 'ProductGroupId', 'ProductGroupName'))
-
-        # Populate the model
-        self.productsModel.select()
 
         # Set up the table view
         self.tableView.setModel(self.productsModel)
