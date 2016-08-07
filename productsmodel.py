@@ -15,7 +15,7 @@ class ProductsTableModel(QSqlRelationalTableModel):
         self.setRelation(self.fieldIndex('ProductGroupId'), QSqlRelation('ProductGroups', 'ProductGroupId', 'ProductGroupName'))
 
         # Populate the model
-        self.productsModel.select()
+        self.select()
 
     def data(self, index, role=Qt.DisplayRole):
 

@@ -2,6 +2,7 @@ import datetime
 import webbrowser
 import requests
 import logging
+import json
 
 from PyQt5.QtChart import *
 from PyQt5.QtGui import *
@@ -20,6 +21,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
         self.setupUi(self)
+
+        # Load up the config data
+        with open('config.json') as configfile:
+            self.config = json.load(configfile)
 
         # Initialize the various components
         self.initDatabase()
@@ -87,7 +92,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def initAmazonSearchEngine(self):
         self.searchThread = QThread()
-        self.amazon = SearchAmazon()
+        self.amazon = SearchAmazon(config=self.config['amz'])
         self.amazon.moveToThread(self.searchThread)
 
         self.amazon.newResultReady.connect(self.processSearchResult)

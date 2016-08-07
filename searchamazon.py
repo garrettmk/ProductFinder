@@ -1,45 +1,47 @@
 import random
+import datetime
 import bottlenose
 
 from lxml import objectify
 from urllib.request import HTTPError
-from gmks_authorize import gmks
 from PyQt5.QtCore import *
 
 
 # ----------------------------------------------------------------------------
 
-categoryToFBAToolkit = {
-    'Toys & Games': 'VG95cyAmIEdhbWVz',
-    'Automotive': 'QXV0b21vdGl2ZQ==',
-    'Home Improvements': 'SG9tZSBJbXByb3ZlbWVudHM=',
-    'Kitchen & Dining': 'SG9tZSAmIEtpdGNoZW4=',
-    'Home & Kitchen': 'SG9tZSBhbmQgS2l0Y2hlbg==',
-    'Health & Personal Care': 'SGVhbHRoICYgUGVyc29uYWwgQ2FyZQ==',
-    'Beauty': 'QmVhdXR5',
-    'Sports & Outdoors': 'U3BvcnRzICYgT3V0ZG9vcnM=',
-    'Musical Instruments': 'TXVzaWNhbCBJbnN0cnVtZW50cw==',
-    'Grocery & Gourmet Food': 'R3JvY2VyeSAmIEdvdXJtZXQgRm9vZA==',
-    'Patio, Lawn & Garden': 'UGF0aW8sIExhd24gJiBHYXJkZW4=',
-    'Clothing': 'Q2xvdGhpbmc=',
-    'Pet Supplies': 'UGV0IFN1cHBsaWVz',
-    'Office Products': 'T2ZmaWNlIFByb2R1Y3Rz',
-    'Industrial & Scientific': 'SW5kdXN0cmlhbCAmIFNjaWVudGlmaWM=',
-    'Jewelry': 'SmV3ZWxyeQ==',
-    'Baby': 'QmFieQ==',
-    'Arts, Crafts & Sewing': 'YXJ0cy1jcmFmdHM=',
-    'Video Games': 'VmlkZW8gR2FtZXM=',
-    'Cell Phones & Accessories': 'Q2VsbCBQaG9uZXMgJiBBY2Nlc3Nvcmllcw==',
-    'Electronics': 'RWxlY3Ryb25pY3M=',
-    'Home & Garden': 'SG9tZSBhbmQgR2FyZGVu',
-    'Watches': 'V2F0Y2hlcw==',
-    'Camera & Photo': 'Q2FtZXJhICYgUGhvdG8=',
-    'Computers & Accessories': 'Q29tcHV0ZXJzICYgQWNjZXNzb3JpZXM=',
-    'Software': 'U29mdHdhcmU=',
-    'Appliances': 'QXBwbGlhbmNlcw==',
-    'Music': 'TXVzaWM=',
-    'Movies & TV': 'TW92aWVzICYgVFY='
-}
+# These aren't used anymore, but I'm keeping this in the comments because it has
+# all the FBA Toolkit tokens nicely laid out. They were a pain to get.
+# categoryToFBAToolkit = {
+#     'Toys & Games': 'VG95cyAmIEdhbWVz',
+#     'Automotive': 'QXV0b21vdGl2ZQ==',
+#     'Home Improvements': 'SG9tZSBJbXByb3ZlbWVudHM=',
+#     'Kitchen & Dining': 'SG9tZSAmIEtpdGNoZW4=',
+#     'Home & Kitchen': 'SG9tZSBhbmQgS2l0Y2hlbg==',
+#     'Health & Personal Care': 'SGVhbHRoICYgUGVyc29uYWwgQ2FyZQ==',
+#     'Beauty': 'QmVhdXR5',
+#     'Sports & Outdoors': 'U3BvcnRzICYgT3V0ZG9vcnM=',
+#     'Musical Instruments': 'TXVzaWNhbCBJbnN0cnVtZW50cw==',
+#     'Grocery & Gourmet Food': 'R3JvY2VyeSAmIEdvdXJtZXQgRm9vZA==',
+#     'Patio, Lawn & Garden': 'UGF0aW8sIExhd24gJiBHYXJkZW4=',
+#     'Clothing': 'Q2xvdGhpbmc=',
+#     'Pet Supplies': 'UGV0IFN1cHBsaWVz',
+#     'Office Products': 'T2ZmaWNlIFByb2R1Y3Rz',
+#     'Industrial & Scientific': 'SW5kdXN0cmlhbCAmIFNjaWVudGlmaWM=',
+#     'Jewelry': 'SmV3ZWxyeQ==',
+#     'Baby': 'QmFieQ==',
+#     'Arts, Crafts & Sewing': 'YXJ0cy1jcmFmdHM=',
+#     'Video Games': 'VmlkZW8gR2FtZXM=',
+#     'Cell Phones & Accessories': 'Q2VsbCBQaG9uZXMgJiBBY2Nlc3Nvcmllcw==',
+#     'Electronics': 'RWxlY3Ryb25pY3M=',
+#     'Home & Garden': 'SG9tZSBhbmQgR2FyZGVu',
+#     'Watches': 'V2F0Y2hlcw==',
+#     'Camera & Photo': 'Q2FtZXJhICYgUGhvdG8=',
+#     'Computers & Accessories': 'Q29tcHV0ZXJzICYgQWNjZXNzb3JpZXM=',
+#     'Software': 'U29mdHdhcmU=',
+#     'Appliances': 'QXBwbGlhbmNlcw==',
+#     'Music': 'TXVzaWM=',
+#     'Movies & TV': 'TW92aWVzICYgVFY='
+# }
 
 # --------------------------------------------------------------------------------
 
@@ -73,13 +75,14 @@ class ListingData(object):
         self.upc = 0
 
 
-class SearchParams(object):
+class SearchRequest(object):
 
-    def __init__(self, keywords=None, searchindex=None, minprice=None, maxprice=None):
+    def __init__(self, name=None, keywords=None, indexes=None, minprice=None, maxprice=None, time=None):
         self.keywords = keywords
-        self.searchIndex = searchindex
+        self.indexes = indexes
         self.minPrice = minprice
         self.maxPrice = maxprice
+        self.timestamp = time
 
 
 # ---------------------------------------------------------------------------------------
@@ -96,13 +99,13 @@ class SearchAmazon(QObject):
     lookup = pyqtSignal(str)
 
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, config={}):
         super(SearchAmazon, self).__init__(parent)
 
         self.abort = False
         self.mutex = QMutex()
 
-        self.amazon = bottlenose.Amazon(gmks['access_key'], gmks['secret_key'], gmks['associate_tag'],
+        self.amazon = bottlenose.Amazon(config['access_key'], config['secret_key'], config['associate_tag'],
                                         Parser=objectify.fromstring, MaxQPS=0.9)
 
         self.search.connect(self._keywordSearch)
