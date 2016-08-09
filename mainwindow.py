@@ -475,12 +475,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     @pyqtSlot()
     def updateWatched(self):
+        asins = []
         q = QSqlQuery('SELECT Asin FROM Products WHERE Watched=1')
-
-        count = 0
         while q.next():
-            count += 1
-            self.amazon.asinSearch(q.value(0))
+            asins.append(q.value(0))
+
+        self.amazon.asinSearch(asins)
 
     @pyqtSlot()
     def applyFilters(self):
@@ -558,18 +558,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     @pyqtSlot()
     def queueNewSearch(self):
         keywords = self.keywordsLine.text()
-        searchindexes = self.searchIndexList.selectedItems()
+        searchindexes = [x.text() for x in self.searchIndexList.selectedItems()]
         minprice = self.minPriceSearchBox.value()
         maxprice = self.maxPriceSearchBox.value()
 
-        if not keywords or not len(searchindexes):
+        if not keywords or not searchindexes:
             return
 
         # Note the time this search was started. Used for filtering.
         self.lastSearchTime = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-
-        for index in searchindexes:
-            self.amazon.keywordSearch(keywords, index.text(), minprice, maxprice)
+        self.amazon.keywordSearch(keywords, searchindexes, minprice, maxprice)
 
     @pyqtSlot(str)
     def searchMessage(self, message):

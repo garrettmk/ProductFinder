@@ -77,12 +77,13 @@ class ListingData(object):
 
 class SearchRequest(object):
 
-    def __init__(self, name=None, keywords=None, indexes=None, minprice=None, maxprice=None, time=None):
+    def __init__(self, keywords=None, indexes=None, minprice=None, maxprice=None):
         self.keywords = keywords
         self.indexes = indexes
         self.minPrice = minprice
         self.maxPrice = maxprice
-        self.timestamp = time
+
+
 
 
 # ---------------------------------------------------------------------------------------
@@ -91,13 +92,8 @@ class SearchRequest(object):
 class SearchAmazon(QObject):
 
     newResultReady = pyqtSignal(ListingData)
-    searchComplete = pyqtSignal(int)
+    searchComplete = pyqtSignal()
     searchMessage = pyqtSignal(str)
-
-    # Private signals
-    search = pyqtSignal(str, str, float, float)
-    lookup = pyqtSignal(str)
-
 
     def __init__(self, parent=None, config={}):
         super(SearchAmazon, self).__init__(parent)
@@ -107,113 +103,111 @@ class SearchAmazon(QObject):
 
         self.amazon = bottlenose.Amazon(config['access_key'], config['secret_key'], config['associate_tag'],
                                         Parser=objectify.fromstring, MaxQPS=0.9)
-
-        self.search.connect(self._keywordSearch)
-        self.lookup.connect(self._asinSearch)
-
         self._retries = 0
 
 
-    def asinSearch(self, asin):
-        if not asin:
-            return
-
-        # Schedule a call to the search function
+    def asinSearch(self, asins):
+        """Schedule a lookup operation for a list of ASINs."""
+        self.abort = False
         QMetaObject.invokeMethod(self, '_asinSearch', Qt.QueuedConnection,
-                                 Q_ARG(str, asin))
+                                 Q_ARG(tuple, tuple(asins)))    # Q_ARG can't take a mutable type, so convert to tuple.
 
-    @pyqtSlot(str)
-    def _asinSearch(self, asin):
-        if not asin:
-            return
-
-        self.searchMessage.emit('Looking up {}...'.format(asin))
-
-        listing = self._item_lookup(asin, ResponseGroup='ItemAttributes,OfferFull,SalesRank,Variations')
-        parsedListing = self._parseListing(listing)
-        if parsedListing is None:
-            self.searchMessage.emit('Parse Error: ' + asin)
-        else:
-            self.newResultReady.emit(parsedListing)
-
-        self.searchComplete.emit(1)
-
-
-    def keywordSearch(self, keywords, searchindex, minprice=None, maxprice=None):
-        if not keywords or not searchindex:
-            return
-
+    def keywordSearch(self, keywords, searchindexes, minprice=None, maxprice=None):
+        """Schedule a search for ``keywords`` in each category in ``searchindexes``."""
+        self.abort = False
         QMetaObject.invokeMethod(self, '_keywordSearch', Qt.QueuedConnection,
                                         Q_ARG(str, keywords),
-                                        Q_ARG(str, searchindex),
+                                        Q_ARG(tuple, tuple(searchindexes)),     # Q_ARG can only take immutable types.
                                         Q_ARG(float, minprice),
                                         Q_ARG(float, maxprice))
-
+    @pyqtSlot()
     def stopSearch(self):
-        self.mutex.lock()
+        """Abort the currently running search operation."""
         self.abort = True
-        self.mutex.unlock()
 
-    @pyqtSlot(str, str, float, float)
-    def _keywordSearch(self, keywords, searchindex, minprice=None, maxprice=None):
+    @pyqtSlot(tuple)
+    def _asinSearch(self, asins):
+        """Perform an ItemLookup request for each ASIN in a list."""
+        for asin in asins:
+            if self.abort:
+                break
+
+            self.searchMessage.emit('Looking up {}...'.format(asin))
+
+            listing = self._item_lookup(asin, ResponseGroup='ItemAttributes,OfferFull,SalesRank,Variations')
+            parsedListing = self._parseListing(listing)
+            if parsedListing is None:
+                self.searchMessage.emit('Parse Error: ' + asin)
+            else:
+                self.newResultReady.emit(parsedListing)
+
+        self.searchComplete.emit()
+        self.searchMessage.emit('Lookup complete. {} results scanned.'.format(asins.index(asin)))
+
+    @pyqtSlot(str, tuple, float, float)
+    def _keywordSearch(self, keywords, searchindexes, minprice=None, maxprice=None):
         scanned = 0
 
-        self.searchMessage.emit('Searching "{}" in {}...'.format(keywords, searchindex))
-
-        kwargs = {}
-        if searchindex != 'All' and searchindex != 'Blended':
-            if minprice is not None:
-                kwargs['MinimumPrice'] = int(minprice * 100)
-            if maxprice is not None and maxprice > 0:
-                kwargs['MaximumPrice'] = int(maxprice * 100)
-
-        maxpages = 5 if searchindex == 'All' else 10
-        for page in range(1, maxpages + 1):
+        for searchindex in searchindexes:
             if self.abort:
-                return
+                break
 
-            # Get some raw results from Amazon
-            results = self._item_search(searchindex, Keywords=keywords, ItemPage=page,
-                                        ResponseGroup='ItemAttributes,OfferFull,SalesRank,Variations', **kwargs)
-            if results is None:
-                return
+            self.searchMessage.emit('Searching "{}" in {}...'.format(keywords, searchindex))
 
-            # Parse the results into ListingData objects, and emit() each result
-            for searchResult in results:
+            options = {}
+            if searchindex != 'All' and searchindex != 'Blended':
+                if minprice is not None:
+                    options['MinimumPrice'] = int(minprice * 100)
+                if maxprice is not None and maxprice > 0:
+                    options['MaximumPrice'] = int(maxprice * 100)
+
+            maxpages = 5 if searchindex == 'All' else 10
+            for page in range(1, maxpages + 1):
                 if self.abort:
-                    return
+                    break
 
-                # Check to see if listing actually refers to a parent item.
-                # If so, do a little sub-search to get it's children
-                parentASIN = str(getattr(searchResult, 'ParentASIN', ''))
-                if parentASIN == searchResult.ASIN:
-                    childASINs = map(str, searchResult.xpath('./aws:Variations/aws:Item/aws:ASIN',
-                                                             namespaces={'aws': searchResult.nsmap.get(None)}))
+                # Get some raw results from Amazon
+                results = self._item_search(searchindex, Keywords=keywords, ItemPage=page,
+                                            ResponseGroup='ItemAttributes,OfferFull,SalesRank,Variations', **options)
+                if results is None:
+                    break
 
-                    for childASIN in childASINs:
-                        if self.abort:
-                            return
+                # Parse the results into ListingData objects, and emit() each result
+                for searchResult in results:
+                    if self.abort:
+                        break
 
-                        childListing = self._item_lookup(childASIN,
-                                                         ResponseGroup='ItemAttributes,OfferFull,SalesRank,Variations')
-                        parsedListing = self._parseListing(childListing, searchResult)
+                    # Check to see if listing actually refers to a parent item.
+                    # If so, do a little sub-search to get it's children
+                    parentASIN = str(getattr(searchResult, 'ParentASIN', ''))
+                    if parentASIN == searchResult.ASIN:
+                        childASINs = map(str, searchResult.xpath('./aws:Variations/aws:Item/aws:ASIN',
+                                                                 namespaces={'aws': searchResult.nsmap.get(None)}))
+
+                        for childASIN in childASINs:
+                            if self.abort:
+                                break
+
+                            childListing = self._item_lookup(childASIN,
+                                                             ResponseGroup='ItemAttributes,OfferFull,SalesRank,Variations')
+                            parsedListing = self._parseListing(childListing, searchResult)
+                            if parsedListing is None:
+                                self.searchMessage.emit('Parse Error: ' + getattr(childListing, 'ASIN', 'N/A'))
+                            else:
+                                self.newResultReady.emit(parsedListing)
+
+                            scanned += 1
+                    else:
+                        parsedListing = self._parseListing(searchResult)
                         if parsedListing is None:
-                            self.searchMessage.emit('Parse Error: ' + getattr(childListing, 'ASIN', 'N/A'))
+                            self.searchMessage.emit('Parse error: ' + getattr(searchResult, 'ASIN', 'N/A'))
                         else:
                             self.newResultReady.emit(parsedListing)
 
                         scanned += 1
-                else:
-                    parsedListing = self._parseListing(searchResult)
-                    if parsedListing is None:
-                        self.searchMessage.emit('Parse error: ' + getattr(searchResult, 'ASIN', 'N/A'))
-                    else:
-                        self.newResultReady.emit(parsedListing)
-
-                    scanned += 1
 
         self.searchMessage.emit('Search complete. {} results scanned.'.format(scanned))
-        self.searchComplete.emit(scanned)
+        self.searchComplete.emit()
 
     def _parseListing(self, listing, parent=None):
         if listing is None:
