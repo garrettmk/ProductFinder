@@ -1,49 +1,10 @@
 import random
-import datetime
+import time
 import bottlenose
 
 from lxml import objectify
 from urllib.request import HTTPError
 from PyQt5.QtCore import *
-
-
-# ----------------------------------------------------------------------------
-
-# These aren't used anymore, but I'm keeping this in the comments because it has
-# all the FBA Toolkit tokens nicely laid out. They were a pain to get.
-# categoryToFBAToolkit = {
-#     'Toys & Games': 'VG95cyAmIEdhbWVz',
-#     'Automotive': 'QXV0b21vdGl2ZQ==',
-#     'Home Improvements': 'SG9tZSBJbXByb3ZlbWVudHM=',
-#     'Kitchen & Dining': 'SG9tZSAmIEtpdGNoZW4=',
-#     'Home & Kitchen': 'SG9tZSBhbmQgS2l0Y2hlbg==',
-#     'Health & Personal Care': 'SGVhbHRoICYgUGVyc29uYWwgQ2FyZQ==',
-#     'Beauty': 'QmVhdXR5',
-#     'Sports & Outdoors': 'U3BvcnRzICYgT3V0ZG9vcnM=',
-#     'Musical Instruments': 'TXVzaWNhbCBJbnN0cnVtZW50cw==',
-#     'Grocery & Gourmet Food': 'R3JvY2VyeSAmIEdvdXJtZXQgRm9vZA==',
-#     'Patio, Lawn & Garden': 'UGF0aW8sIExhd24gJiBHYXJkZW4=',
-#     'Clothing': 'Q2xvdGhpbmc=',
-#     'Pet Supplies': 'UGV0IFN1cHBsaWVz',
-#     'Office Products': 'T2ZmaWNlIFByb2R1Y3Rz',
-#     'Industrial & Scientific': 'SW5kdXN0cmlhbCAmIFNjaWVudGlmaWM=',
-#     'Jewelry': 'SmV3ZWxyeQ==',
-#     'Baby': 'QmFieQ==',
-#     'Arts, Crafts & Sewing': 'YXJ0cy1jcmFmdHM=',
-#     'Video Games': 'VmlkZW8gR2FtZXM=',
-#     'Cell Phones & Accessories': 'Q2VsbCBQaG9uZXMgJiBBY2Nlc3Nvcmllcw==',
-#     'Electronics': 'RWxlY3Ryb25pY3M=',
-#     'Home & Garden': 'SG9tZSBhbmQgR2FyZGVu',
-#     'Watches': 'V2F0Y2hlcw==',
-#     'Camera & Photo': 'Q2FtZXJhICYgUGhvdG8=',
-#     'Computers & Accessories': 'Q29tcHV0ZXJzICYgQWNjZXNzb3JpZXM=',
-#     'Software': 'U29mdHdhcmU=',
-#     'Appliances': 'QXBwbGlhbmNlcw==',
-#     'Music': 'TXVzaWM=',
-#     'Movies & TV': 'TW92aWVzICYgVFY='
-# }
-
-# --------------------------------------------------------------------------------
 
 
 class ListingData(object):
@@ -75,223 +36,223 @@ class ListingData(object):
         self.upc = 0
 
 
-class SearchRequest(object):
+class AmzSearchRequest:
 
-    def __init__(self, keywords=None, indexes=None, minprice=None, maxprice=None):
+    def __init__(self, keywords=None, indexes=[], minprice=None, maxprice=None):
         self.keywords = keywords
-        self.indexes = indexes
-        self.minPrice = minprice
-        self.maxPrice = maxprice
+        self.searchindexes = indexes
+        self.minprice = minprice
+        self.maxprice = maxprice
 
 
+class AmzLookupRequest:
+
+    def __init__(self, asins=[]):
+        self.asins = asins
 
 
-# ---------------------------------------------------------------------------------------
+class AmazonSearchEngine(QThread):
 
+    listingReady = pyqtSignal(ListingData)
+    finished = pyqtSignal()
+    message = pyqtSignal(str)
 
-class SearchAmazon(QObject):
-
-    newResultReady = pyqtSignal(ListingData)
-    searchComplete = pyqtSignal()
-    searchMessage = pyqtSignal(str)
-
-    def __init__(self, parent=None, config={}):
-        super(SearchAmazon, self).__init__(parent)
+    def __init__(self, config):
+        super(AmazonSearchEngine, self).__init__()
 
         self.abort = False
+        self.retries = 0
+        self.scanned = 0
+        self.pending = []
         self.mutex = QMutex()
+        self.condition = QWaitCondition()
+        self.responsegroups = 'ItemAttributes,OfferFull,SalesRank,Variations'
+        self.bottlenose = bottlenose.Amazon(config['access_key'], config['secret_key'], config['associate_tag'],
+                                            Parser=objectify.fromstring, MaxQPS=0.9)
 
-        self.amazon = bottlenose.Amazon(config['access_key'], config['secret_key'], config['associate_tag'],
-                                        Parser=objectify.fromstring, MaxQPS=0.9)
-        self._retries = 0
-
-
-    def asinSearch(self, asins):
-        """Schedule a lookup operation for a list of ASINs."""
+    def search(self, keywords, indexes, minprice=None, maxprice=None):
+        """Search for ``keywords`` in each category listed in ``indexes``."""
+        self.mutex.lock()
         self.abort = False
-        QMetaObject.invokeMethod(self, '_asinSearch', Qt.QueuedConnection,
-                                 Q_ARG(tuple, tuple(asins)))    # Q_ARG can't take a mutable type, so convert to tuple.
+        self.pending.append(AmzSearchRequest(keywords, indexes, minprice, maxprice))
+        self.mutex.unlock()
 
-    def keywordSearch(self, keywords, searchindexes, minprice=None, maxprice=None):
-        """Schedule a search for ``keywords`` in each category in ``searchindexes``."""
+        if not self.isRunning():
+            self.start(self.LowPriority)
+        else:
+            self.condition.wakeOne()
+
+    def lookup(self, asins):
+        """Look up each ASIN listed in ``asins``."""
+        self.mutex.lock()
         self.abort = False
-        QMetaObject.invokeMethod(self, '_keywordSearch', Qt.QueuedConnection,
-                                        Q_ARG(str, keywords),
-                                        Q_ARG(tuple, tuple(searchindexes)),     # Q_ARG can only take immutable types.
-                                        Q_ARG(float, minprice),
-                                        Q_ARG(float, maxprice))
-    @pyqtSlot()
-    def stopSearch(self):
-        """Abort the currently running search operation."""
+        self.pending.append(AmzLookupRequest(asins))
+        self.mutex.unlock()
+
+        if not self.isRunning():
+            self.start(self.LowPriority)
+        else:
+            self.condition.wakeOne()
+
+    def stop(self):
+        """Abort any current or pending operations."""
+        self.mutex.lock()
         self.abort = True
+        self.pending.clear()
+        self.mutex.unlock()
 
-    @pyqtSlot(tuple)
-    def _asinSearch(self, asins):
-        """Perform an ItemLookup request for each ASIN in a list."""
-        for asin in asins:
+    def run(self):
+        while True:
+            self.mutex.lock()
+            if not self.pending:
+                self.condition.wait(self.mutex)
+            op = self.pending.pop(0)
+            self.mutex.unlock()
+
+            if isinstance(op, AmzSearchRequest):
+                self.scanned = 0
+                self._item_search(op)
+                self.message.emit('Search complete. {} listings scanned.'.format(self.scanned))
+            elif isinstance(op, AmzLookupRequest):
+                self.scanned = 0
+                self._item_lookup(op)
+                self.message.emit('Lookup complete. {} listings scanned.'.format(self.scanned))
+
+
+    def _item_lookup(self, op, parent=None):
+        for asin in op.asins:
             if self.abort:
-                break
+                return
 
-            self.searchMessage.emit('Looking up {}...'.format(asin))
+            self.message.emit('Looking up {}...'.format(asin))
+            response = self.bottlenose.ItemLookup(ErrorHandler=self._bottlenose_error_handler, ItemId=asin, ResponseGroup=self.responsegroups)
+            if not self._validate(response):
+                continue
 
-            listing = self._item_lookup(asin, ResponseGroup='ItemAttributes,OfferFull,SalesRank,Variations')
-            parsedListing = self._parseListing(listing)
-            if parsedListing is None:
-                self.searchMessage.emit('Parse Error: ' + asin)
-            else:
-                self.newResultReady.emit(parsedListing)
+            self._process(response, parent)
 
-        self.searchComplete.emit()
-        self.searchMessage.emit('Lookup complete. {} results scanned.'.format(asins.index(asin)))
-
-    @pyqtSlot(str, tuple, float, float)
-    def _keywordSearch(self, keywords, searchindexes, minprice=None, maxprice=None):
-        scanned = 0
-
-        for searchindex in searchindexes:
+    def _item_search(self, op):
+        for index in op.searchindexes:
             if self.abort:
-                break
+                return
 
-            self.searchMessage.emit('Searching "{}" in {}...'.format(keywords, searchindex))
+            self.message.emit('Searching for {} in {}...'.format(op.keywords, index))
 
             options = {}
-            if searchindex != 'All' and searchindex != 'Blended':
-                if minprice is not None:
-                    options['MinimumPrice'] = int(minprice * 100)
-                if maxprice is not None and maxprice > 0:
-                    options['MaximumPrice'] = int(maxprice * 100)
+            if index != 'All' and index != 'Blended':
+                if op.minprice:
+                    options['MinimumPrice'] = int(op.minprice * 100)
+                if op.maxprice:
+                    options['MaximumPrice'] = int(op.maxprice * 100)
 
-            maxpages = 5 if searchindex == 'All' else 10
+            maxpages = 5 if index == 'All' else 10
+
             for page in range(1, maxpages + 1):
                 if self.abort:
+                    return
+
+                response = self.bottlenose.ItemSearch(ErrorHandler=self._bottlenose_error_handler, Keywords=op.keywords,
+                                                      SearchIndex=index, ResponseGroup=self.responsegroups, ItemPage=page)
+                if not self._validate(response):
                     break
 
-                # Get some raw results from Amazon
-                results = self._item_search(searchindex, Keywords=keywords, ItemPage=page,
-                                            ResponseGroup='ItemAttributes,OfferFull,SalesRank,Variations', **options)
-                if results is None:
-                    break
+                self._process(response)
 
-                # Parse the results into ListingData objects, and emit() each result
-                for searchResult in results:
-                    if self.abort:
-                        break
 
-                    # Check to see if listing actually refers to a parent item.
-                    # If so, do a little sub-search to get it's children
-                    parentASIN = str(getattr(searchResult, 'ParentASIN', ''))
-                    if parentASIN == searchResult.ASIN:
-                        childASINs = map(str, searchResult.xpath('./aws:Variations/aws:Item/aws:ASIN',
-                                                                 namespaces={'aws': searchResult.nsmap.get(None)}))
+    def _validate(self, response):
+        if response is None:
+            return False
 
-                        for childASIN in childASINs:
-                            if self.abort:
-                                break
+        errors = response.xpath('//aws:Error', namespaces={'aws': response.nsmap.get(None)})
+        if errors:
+            for error in errors:
+                self.message.emit(error.Code + ': ' + error.Message)
+            return False
 
-                            childListing = self._item_lookup(childASIN,
-                                                             ResponseGroup='ItemAttributes,OfferFull,SalesRank,Variations')
-                            parsedListing = self._parseListing(childListing, searchResult)
-                            if parsedListing is None:
-                                self.searchMessage.emit('Parse Error: ' + getattr(childListing, 'ASIN', 'N/A'))
-                            else:
-                                self.newResultReady.emit(parsedListing)
+        return True
 
-                            scanned += 1
-                    else:
-                        parsedListing = self._parseListing(searchResult)
-                        if parsedListing is None:
-                            self.searchMessage.emit('Parse error: ' + getattr(searchResult, 'ASIN', 'N/A'))
-                        else:
-                            self.newResultReady.emit(parsedListing)
+    def _process(self, response, parent=None):
+        for item in response.Items.Item:
+            if self.abort:
+                return
 
-                        scanned += 1
+            # Check if this is actually a parent listing. If so, do a sub-search to get the children
+            parentASIN = str(getattr(item, 'ParentASIN', None))
+            if parentASIN == item.ASIN:
+                children = [str(asin) for asin in item.xpath('./aws:Variations/aws:Item/aws:ASIN', namespaces={'aws': item.nsmap.get(None)})]
+                self._item_lookup(AmzLookupRequest(children), item)
+            else:
+                data = self._dataFromXml(item, parent)
+                if data:
+                    self.listingReady.emit(data)
 
-        self.searchMessage.emit('Search complete. {} results scanned.'.format(scanned))
-        self.searchComplete.emit()
-
-    def _parseListing(self, listing, parent=None):
-        if listing is None:
-            return
-
+    def _dataFromXml(self, item, parent=None):
+        self.scanned += 1
         data = ListingData()
 
         try:
-            data.asin = str(listing.ASIN)
-            data.title = str(listing.ItemAttributes.Title)
+            data.asin = str(item.ASIN)
+            data.title = str(item.ItemAttributes.Title)
         except AttributeError:
-            return
+            return None
 
-        data.salesrank = int(getattr(listing, 'SalesRank', 0))
+        data.salesrank = int(getattr(item, 'SalesRank', 0))
         if not data.salesrank:
             data.salesrank = int(getattr(parent, 'SalesRank', 0))
 
-        data.productgroup = str(getattr(listing.ItemAttributes, 'ProductGroup', 'N/A'))
+        data.productgroup = str(getattr(item.ItemAttributes, 'ProductGroup', 'N/A'))
 
-        data.make = str(getattr(listing.ItemAttributes, 'Brand', ''))
+        data.make = str(getattr(item.ItemAttributes, 'Brand', ''))
         if not data.make:
-            data.make = str(getattr(listing.ItemAttributes, 'Manufacturer', ''))
+            data.make = str(getattr(item.ItemAttributes, 'Manufacturer', ''))
 
-        data.upc = int(getattr(listing.ItemAttributes, 'UPC', 0))
-        data.model = str(getattr(listing.ItemAttributes, 'Model', ''))
+        data.upc = int(getattr(item.ItemAttributes, 'UPC', 0))
+        data.model = str(getattr(item.ItemAttributes, 'Model', ''))
         if not data.model:
-            data.model = str(getattr(listing.ItemAttributes, 'MPN', ''))
+            data.model = str(getattr(item.ItemAttributes, 'MPN', ''))
 
-        if hasattr(listing.ItemAttributes, 'ItemDimensions'):
-            data.length = float(getattr(listing.ItemAttributes.ItemDimensions, 'Length', 0))
-            data.width = float(getattr(listing.ItemAttributes.ItemDimensions, 'Width', 0))
-            data.height = float(getattr(listing.ItemAttributes.ItemDimensions, 'Height', 0))
-            data.weight = float(getattr(listing.ItemAttributes.ItemDimensions, 'Weight', 0))
+        if hasattr(item.ItemAttributes, 'ItemDimensions'):
+            data.length = float(getattr(item.ItemAttributes.ItemDimensions, 'Length', 0))
+            data.width = float(getattr(item.ItemAttributes.ItemDimensions, 'Width', 0))
+            data.height = float(getattr(item.ItemAttributes.ItemDimensions, 'Height', 0))
+            data.weight = float(getattr(item.ItemAttributes.ItemDimensions, 'Weight', 0))
 
-        data.url = str(getattr(listing, 'DetailPageURL', ''))
+        data.url = str(getattr(item, 'DetailPageURL', ''))
 
         try:
-            data.offers = int(listing.OfferSummary.TotalNew)
+            data.offers = int(item.OfferSummary.TotalNew)
         except:
             data.offers = 0
 
         try:
-            data.price = float(listing.OfferSummary.LowestNewPrice.Amount) / 100
+            data.price = float(item.OfferSummary.LowestNewPrice.Amount) / 100
         except AttributeError:
             data.price = 0
 
         try:
-            data.merchant = str(listing.Offers.Offer.Merchant.Name)
+            data.merchant = str(item.Offers.Offer.Merchant.Name)
         except AttributeError:
             data.merchant = 'N/A'
 
         try:
-            data.prime = bool(listing.Offers.Offer.OfferListing.IsEligibleForPrime)
+            data.prime = bool(item.Offers.Offer.OfferListing.IsEligibleForPrime)
         except AttributeError:
             data.prime = False
 
         return data
 
-    def _item_search(self, searchindex, **kwargs):
-        try:
-            return self.amazon.ItemSearch(ErrorHandler=self._error_handler, SearchIndex=searchindex, **kwargs).Items.Item
-        except Exception as e:
-            self.searchMessage.emit(repr(e))
-            return None
-
-    def _item_lookup(self, itemId, **kwargs):
-        try:
-            return self.amazon.ItemLookup(ErrorHandler=self._error_handler, ItemId=itemId, **kwargs).Items.Item
-        except Exception as e:
-            self.searchMessage.emit(repr(e))
-            return None
-
-    def _error_handler(self, err):
+    def _bottlenose_error_handler(self, err):
         # Pretty much copied from the bottlenose docs
         ex = err['exception']
         message = repr(ex)
         if isinstance(ex, HTTPError):
             message += ' code ' + str(ex.code)
 
-            if ex.code == 503 and self._retries < 3:
-                self.searchMessage.emit(message + ', waiting...')
+            if ex.code == 503 and self.retries < 3:
+                self.message.emit(message + ', waiting...')
                 time.sleep(random.expovariate(0.1))
                 self._retries += 1
                 return True
 
-        self._retries = 0
-        self.searchMessage.emit(message)
+        self.retries = 0
+        self.message.emit(message)

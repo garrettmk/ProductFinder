@@ -12,7 +12,7 @@ from mainwindow_ui import *
 from categoriesdialog import *
 from productsmodel import ProductsTableModel
 from delegates import *
-from searchamazon import SearchAmazon, ListingData
+from searchamazon import AmazonSearchEngine, ListingData
 from initdb import *
 
 
@@ -38,7 +38,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Set up UI connections
         self.keywordsLine.returnPressed.connect(self.queueNewSearch)
         self.searchButton.clicked.connect(self.queueNewSearch)
-        self.cancelSearchButton.clicked.connect(self.amazon.stopSearch)
+        self.cancelSearchButton.clicked.connect(self.amazon.stop)
         self.clearSearchStatusBtn.clicked.connect(self.searchStatusList.clear)
 
         self.applyFiltersButton.clicked.connect(self.applyFilters)
@@ -91,14 +91,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         return True
 
     def initAmazonSearchEngine(self):
-        self.searchThread = QThread()
-        self.amazon = SearchAmazon(config=self.config['amz'])
-        self.amazon.moveToThread(self.searchThread)
-
-        self.amazon.newResultReady.connect(self.processSearchResult)
-        self.amazon.searchMessage.connect(self.searchStatusList.addItem)
-
-        self.searchThread.start()
+        self.amazon = AmazonSearchEngine(config=self.config['amz'])
+        self.amazon.listingReady.connect(self.processSearchResult)
+        self.amazon.message.connect(self.statusMessage)
 
         self.lastSearchTime = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -353,7 +348,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     @pyqtSlot()
     def recalculateRankings(self):
-        self.searchMessage('Recalculating rankings...')
+        self.statusMessage('Recalculating rankings...')
 
         q = QSqlQuery()
         crankindex = self.productsModel.fieldIndex('CRank')
@@ -373,7 +368,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             crank = self.getRanking(categoryId, salesrank, offers, prime)
             self.productsModel.setData(self.productsModel.index(row, crankindex), crank)
 
-        self.searchMessage('Rank calculations complete.')
+        self.statusMessage('Rank calculations complete.')
 
     @pyqtSlot()
     def getFBAFees(self):
@@ -396,7 +391,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         params = {'category': token, 'rank': salesrank}
         response = requests.get('http://fbatoolkit.com/estimate_ajax', params=params)
         if response.status_code != 200:
-            self.searchMessage('Error pulling from fbatoolkit: ' + response.reason)
+            self.statusMessage('Error pulling from fbatoolkit: ' + response.reason)
             return
 
         data = response.json()
@@ -409,13 +404,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 nums = [float(s) for s in data['sales_per_day_30day_avg'].split() if s.isdigit()]
                 volume = int(nums[0] / nums[1] * 30)
             except:
-                self.searchMessage('Error parsing data from fbatoolkit.')
+                self.statusMessage('Error parsing data from fbatoolkit.')
                 return
 
             self.monthlyVolumeBox.setValue(volume)
             #self.mapper.submit()
         else:
-            self.searchMessage('Error parsing response: data unavailable')
+            self.statusMessage('Error parsing response: data unavailable')
 
     def getRanking(self, categoryId, salesrank, offers, prime):
         q = QSqlQuery("SELECT MaxRank FROM Categories WHERE CategoryId={}".format(categoryId))
@@ -480,7 +475,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         while q.next():
             asins.append(q.value(0))
 
-        self.amazon.asinSearch(asins)
+        self.amazon.lookup(asins)
 
     @pyqtSlot()
     def applyFilters(self):
@@ -567,10 +562,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Note the time this search was started. Used for filtering.
         self.lastSearchTime = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-        self.amazon.keywordSearch(keywords, searchindexes, minprice, maxprice)
+        self.amazon.search(keywords, searchindexes, minprice, maxprice)
 
     @pyqtSlot(str)
-    def searchMessage(self, message):
+    def statusMessage(self, message):
         self.searchStatusList.addItem(message)
         self.searchStatusList.scrollToBottom()
 
