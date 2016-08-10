@@ -1,6 +1,25 @@
 from PyQt5.QtCore import *
 from PyQt5.QtSql import *
 
+class AmazonProductModel(QSqlRelationalTableModel):
+
+    def __init__(self, parent=None):
+        super(AmazonProductModel, self).__init__(parent)
+
+    def data(self, index, role=Qt.DisplayRole):
+
+        if role == Qt.TextAlignmentRole:
+            rightaligned = [self.fieldIndex(col) for col in ['CRank', 'SalesRank', 'Price', 'Offers', 'MyPrice',
+                                                             'MyCost', 'FBAFees', 'MonthlyVolume', 'Weight',
+                                                             'ItemLength', 'ItemWidth', 'ItemHeight']]
+
+            midaligned = [self.fieldIndex(col) for col in ['Watched']]
+
+            if index.column() in rightaligned:
+                return Qt.AlignRight | Qt.AlignVCenter
+            if index.column() in midaligned:
+                return Qt.AlignCenter | Qt.AlignVCenter
+
 
 class ProductsTableModel(QSqlRelationalTableModel):
 
