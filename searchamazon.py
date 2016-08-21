@@ -118,6 +118,9 @@ class AmazonSearchEngine(QThread):
                 self._item_lookup(op)
                 self.message.emit('Lookup complete. {} listings scanned.'.format(self.scanned))
 
+            if not self.pending:
+                self.finished.emit()
+
 
     def _item_lookup(self, op, parent=None):
         for asin in op.asins:

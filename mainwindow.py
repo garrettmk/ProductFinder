@@ -30,14 +30,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.initDatabase()
         self.initAmazonSearchEngine()
         self.initProductsModelView()
-        self.initObsModelView()
+        self.initHistoryModelView()
         self.initCategoriesDialog()
         self.initDataWidgetMapper()
         self.initHistoryChart()
 
         # Set up UI connections
-        self.keywordsLine.returnPressed.connect(self.queueNewSearch)
-        self.searchButton.clicked.connect(self.queueNewSearch)
+        self.keywordsLine.returnPressed.connect(self.newSearch)
+        self.searchButton.clicked.connect(self.newSearch)
         self.cancelSearchButton.clicked.connect(self.amazon.stop)
         self.clearSearchStatusBtn.clicked.connect(self.searchStatusList.clear)
 
@@ -58,7 +58,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionShow_Graph.triggered.connect(self.showHistoryGraph)
 
         # Initialize the view
-        self.tableView.selectRow(0)
+        self.productsTable.selectRow(0)
         self.showHistoryGraph()
 
         self.startTimer(3600000, Qt.CoarseTimer)
@@ -92,7 +92,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def initAmazonSearchEngine(self):
         self.amazon = AmazonSearchEngine(config=self.config['amz'])
-        self.amazon.listingReady.connect(self.processSearchResult)
         self.amazon.message.connect(self.statusMessage)
 
         self.lastSearchTime = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
@@ -100,13 +99,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def initProductsModelView(self):
         # Initialize the model
         self.productsModel = ProductsTableModel(self)
+        self.productsModel.setEditStrategy(QSqlTableModel.OnFieldChange)
+
+        # Make connections
+        self.amazon.listingReady.connect(self.productsModel.update)
 
         # Set up the table view
-        self.tableView.setModel(self.productsModel)
-        self.tableView.setItemDelegate(QSqlRelationalDelegate(self))
-        self.tableView.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.tableView.setSortingEnabled(True)
-        self.tableView.resizeColumnsToContents()
+        self.productsTable.setModel(self.productsModel)
+        self.productsTable.setItemDelegate(QSqlRelationalDelegate(self))
+        self.productsTable.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.productsTable.setSortingEnabled(True)
+        self.productsTable.horizontalHeader().setSectionsMovable(True)
+        self.productsTable.sortByColumn(self.productsModel.fieldIndex('CRank'), Qt.AscendingOrder)
+        self.productsTable.resizeColumnsToContents()
 
         # Install delegates
         numbers = NumberDelegate(self)
@@ -115,15 +120,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         tolocaltime = TimestampToLocalDelegate(self)
 
         for column in map(self.productsModel.fieldIndex, ['CRank', 'SalesRank', 'Offers']):
-            self.tableView.setItemDelegateForColumn(column, numbers)
+            self.productsTable.setItemDelegateForColumn(column, numbers)
 
         for column in [self.productsModel.fieldIndex('Price')]:
-            self.tableView.setItemDelegateForColumn(column, currency)
+            self.productsTable.setItemDelegateForColumn(column, currency)
 
         for column in map(self.productsModel.fieldIndex, ['Watched', 'Prime', 'PrivateLabel']):
-            self.tableView.setItemDelegateForColumn(column, yesno)
+            self.productsTable.setItemDelegateForColumn(column, yesno)
 
-        self.tableView.setItemDelegateForColumn(self.productsModel.fieldIndex('Timestamp'), tolocaltime)
+        self.productsTable.setItemDelegateForColumn(self.productsModel.fieldIndex('Timestamp'), tolocaltime)
 
         # Hide some detail columns
         hiddencolumns = map(self.productsModel.fieldIndex, ['Asin', 'ProductGroupName', 'Url', 'PrivateLabel',
@@ -131,42 +136,38 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                                             'FBAFees', 'MonthlyVolume', 'Weight', 'ItemWidth',
                                                             'ItemLength', 'ItemHeight', 'UPC'])
         for column in hiddencolumns:
-            self.tableView.horizontalHeader().setSectionHidden(column, True)
+            self.productsTable.horizontalHeader().setSectionHidden(column, True)
 
-        # Set sections to be movable, and set the default sorting
-        self.tableView.horizontalHeader().setSectionsMovable(True)
-        self.tableView.sortByColumn(self.productsModel.fieldIndex('CRank'), Qt.AscendingOrder)
-
-    def initObsModelView(self):
+    def initHistoryModelView(self):
         # Initialize the model
-        self.obsModel = QSqlRelationalTableModel(self)
-        self.obsModel.setTable('Observations')
-        self.obsModel.select()
+        self.historyModel = QSqlRelationalTableModel(self)
+        self.historyModel.setTable('Observations')
+        self.historyModel.select()
 
         # Set up the table view
-        self.obsTable.setModel(self.obsModel)
-        self.obsTable.horizontalHeader().setSectionHidden(self.obsModel.fieldIndex('Asin'), True)
-        self.obsTable.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.historyTable.setModel(self.historyModel)
+        self.historyTable.horizontalHeader().setSectionHidden(self.historyModel.fieldIndex('Asin'), True)
+        self.historyTable.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
         # Install delegates
-        self.obsTable.setItemDelegate(QSqlRelationalDelegate(self))
+        self.historyTable.setItemDelegate(QSqlRelationalDelegate(self))
 
         numbers = NumberDelegate(self)
         currency = CurrencyDelegate(self)
         yesno = YesNoComboDelegate(self)
         tolocaltime = TimestampToLocalDelegate(self)
 
-        for column in map(self.obsModel.fieldIndex, ['SalesRank', 'Offers']):
-            self.obsTable.setItemDelegateForColumn(column, numbers)
+        for column in map(self.historyModel.fieldIndex, ['SalesRank', 'Offers']):
+            self.historyTable.setItemDelegateForColumn(column, numbers)
 
-        self.obsTable.setItemDelegateForColumn(self.obsModel.fieldIndex('Price'), currency)
-        self.obsTable.setItemDelegateForColumn(self.obsModel.fieldIndex('Prime'), yesno)
-        self.obsTable.setItemDelegateForColumn(self.obsModel.fieldIndex('Timestamp'), tolocaltime)
+        self.historyTable.setItemDelegateForColumn(self.historyModel.fieldIndex('Price'), currency)
+        self.historyTable.setItemDelegateForColumn(self.historyModel.fieldIndex('Prime'), yesno)
+        self.historyTable.setItemDelegateForColumn(self.historyModel.fieldIndex('Timestamp'), tolocaltime)
 
         # Make connections
-        self.tableView.selectionModel().currentRowChanged.connect(self.updateObservations)
-        self.obsTable.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.obsTable.customContextMenuRequested.connect(self.chooseHistoryViewMenu)
+        self.productsTable.selectionModel().currentRowChanged.connect(self.updateObservations)
+        self.historyTable.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.historyTable.customContextMenuRequested.connect(self.chooseHistoryViewMenu)
 
     def initCategoriesDialog(self):
         # Set up the models
@@ -183,45 +184,40 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def initDataWidgetMapper(self):
         self.mapper = QDataWidgetMapper(self)
-        self.mapper.setModel(self.productsModel)
+        detailModel = ProductsTableModel(self)
+        self.mapper.setModel(detailModel)
         self.mapper.setItemDelegate(QSqlRelationalDelegate(self))
         self.mapper.setSubmitPolicy(QDataWidgetMapper.AutoSubmit)
-        self.tableView.selectionModel().currentRowChanged.connect(self.mapper.setCurrentModelIndex)
+        self.productsTable.selectionModel().currentRowChanged.connect(self.updateDetailModel)
 
-        catindex = self.productsModel.fieldIndex('CategoryName')
-        catmodel = self.productsModel.relationModel(catindex)
+        catindex = detailModel.fieldIndex('CategoryName')
+        catmodel = detailModel.relationModel(catindex)
         self.prodCategoryBox.setModel(catmodel)
         self.prodCategoryBox.setModelColumn(catmodel.fieldIndex('CategoryName'))
         self.prodCategoryBox.currentIndexChanged.connect(self.mapper.submit)
 
-        self.mapper.addMapping(self.prodTitleLine, self.productsModel.fieldIndex('Title'))
-        self.mapper.addMapping(self.prodUrlLine, self.productsModel.fieldIndex('Url'))
-        self.mapper.addMapping(self.prodASINLine, self.productsModel.fieldIndex('Asin'))
-        self.mapper.addMapping(self.prodGroupLine, self.productsModel.fieldIndex('ProductGroupName'))
+        self.mapper.addMapping(self.prodTitleLine, detailModel.fieldIndex('Title'))
+        self.mapper.addMapping(self.prodUrlLine, detailModel.fieldIndex('Url'))
+        self.mapper.addMapping(self.prodASINLine, detailModel.fieldIndex('Asin'))
+        self.mapper.addMapping(self.prodGroupLine, detailModel.fieldIndex('ProductGroupName'))
         self.mapper.addMapping(self.prodCategoryBox, catindex)
-        self.mapper.addMapping(self.prodSalesRankLine, self.productsModel.fieldIndex('SalesRank'))
-        self.mapper.addMapping(self.prodPriceBox, self.productsModel.fieldIndex('Price'))
-        self.mapper.addMapping(self.prodOffersBox, self.productsModel.fieldIndex('Offers'))
-        self.mapper.addMapping(self.prodManufacturerLine, self.productsModel.fieldIndex('Manufacturer'))
-        self.mapper.addMapping(self.prodMpnLine, self.productsModel.fieldIndex('PartNumber'))
-        self.mapper.addMapping(self.prodUPCLine, self.productsModel.fieldIndex('UPC'))
+        self.mapper.addMapping(self.prodSalesRankLine, detailModel.fieldIndex('SalesRank'))
+        self.mapper.addMapping(self.prodPriceBox, detailModel.fieldIndex('Price'))
+        self.mapper.addMapping(self.prodOffersBox, detailModel.fieldIndex('Offers'))
+        self.mapper.addMapping(self.prodManufacturerLine, detailModel.fieldIndex('Manufacturer'))
+        self.mapper.addMapping(self.prodMpnLine, detailModel.fieldIndex('PartNumber'))
+        self.mapper.addMapping(self.prodUPCLine, detailModel.fieldIndex('UPC'))
 
-        self.mapper.addMapping(self.myPriceBox, self.productsModel.fieldIndex('MyPrice'))
-        self.mapper.addMapping(self.myCostBox, self.productsModel.fieldIndex('MyCost'))
-        self.mapper.addMapping(self.fbaFeesBox, self.productsModel.fieldIndex('FBAFees'))
-        self.mapper.addMapping(self.monthlyVolumeBox, self.productsModel.fieldIndex('MonthlyVolume'))
-
-        # self.mapper.addMapping(self.prodWeightBox, self.productsModel.fieldIndex('Weight'))
-        # self.mapper.addMapping(self.prodLengthBox, self.productsModel.fieldIndex('ItemLength'))
-        # self.mapper.addMapping(self.prodWidthBox, self.productsModel.fieldIndex('ItemWidth'))
-        # self.mapper.addMapping(self.prodHeightBox, self.productsModel.fieldIndex('ItemHeight'))
+        self.mapper.addMapping(self.myPriceBox, detailModel.fieldIndex('MyPrice'))
+        self.mapper.addMapping(self.myCostBox, detailModel.fieldIndex('MyCost'))
+        self.mapper.addMapping(self.fbaFeesBox, detailModel.fieldIndex('FBAFees'))
+        self.mapper.addMapping(self.monthlyVolumeBox, detailModel.fieldIndex('MonthlyVolume'))
 
         self.myPriceBox.valueChanged.connect(self.calculateProfits)
         self.myCostBox.valueChanged.connect(self.calculateProfits)
         self.fbaFeesBox.valueChanged.connect(self.calculateProfits)
         self.monthlyVolumeBox.valueChanged.connect(self.calculateProfits)
 
-        self.mapper.toFirst()
 
     def initHistoryChart(self):
         # Get rid of the placeholder put there by Qt Designer
@@ -233,8 +229,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.historyChartView.setRenderHint(QPainter.Antialiasing)
         self.historyChartView.setContextMenuPolicy(Qt.CustomContextMenu)
 
-        self.tableView.selectionModel().currentRowChanged.connect(self.updateHistoryChart)
+        self.productsTable.selectionModel().currentRowChanged.connect(self.updateHistoryChart)
         self.historyChartView.customContextMenuRequested.connect(self.chooseHistoryViewMenu)
+
+    @pyqtSlot(QModelIndex, QModelIndex)
+    def updateDetailModel(self, current, previous):
+        asin = self.productsModel.data(self.productsModel.index(current.row(), self.productsModel.fieldIndex('Asin')), Qt.DisplayRole)
+        self.mapper.model().setFilter("Asin='{}'".format(asin))
+        self.mapper.model().select()
+        self.mapper.toFirst()
 
     @pyqtSlot(QPoint)
     def chooseHistoryViewMenu(self, point):
@@ -242,8 +245,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         menu.addAction(self.actionShow_Graph)
         menu.addAction(self.actionShow_Table)
 
-        if self.obsTable.hasFocus():
-            point = self.obsTable.viewport().mapToGlobal(point)
+        if self.historyTable.hasFocus():
+            point = self.historyTable.viewport().mapToGlobal(point)
         elif self.historyChartView.hasFocus():
             point = self.historyChartView.viewport().mapToGlobal(point)
 
@@ -330,7 +333,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.historyChartView.setChart(chart)
 
-
     @pyqtSlot()
     def calculateProfits(self):
         myprice = self.myPriceBox.value()
@@ -345,6 +347,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.marginBox.setValue(margin * 100)
         self.monthlyCostBox.setValue(mycost * volume)
         self.monthlyProfitBox.setValue(profit * volume)
+
+        self.mapper.submit()
 
     @pyqtSlot()
     def recalculateRankings(self):
@@ -408,29 +412,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 return
 
             self.monthlyVolumeBox.setValue(volume)
-            #self.mapper.submit()
+            self.mapper.submit()
         else:
             self.statusMessage('Error parsing response: data unavailable')
-
-    def getRanking(self, categoryId, salesrank, offers, prime):
-        q = QSqlQuery("SELECT MaxRank FROM Categories WHERE CategoryId={}".format(categoryId))
-        if q.lastError().type() != QSqlError.NoError:
-            print("Could not fetch MaxRank from Categories: " + q.lastError().text())
-
-        q.first()
-        maxrank = int(q.value(0)) if q.value(0) is not None else 0
-
-        if maxrank > 0:
-            crank = salesrank * 100000 / maxrank
-
-            if prime:
-                crank *= offers + 1
-            else:
-                crank *= 1.25 ** offers
-
-            return int(crank)
-        else:
-            return 0
 
     @pyqtSlot()
     def updateProductInfo(self):
@@ -484,9 +468,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.filterDateBox.currentIndex() == 0:      # All results
             pass
         elif self.filterDateBox.currentIndex() == 1:    # Last search only
-            conditions.append("Timestamp >= '{}' AND Watched=0".format(self.lastSearchTime))
+            conditions.append("Timestamp >= '{}'".format(self.lastSearchTime))
         elif self.filterDateBox.currentIndex() == 2:    # Today only
-            conditions.append("DATE(Timestamp)=DATE('now') AND Watched=0")
+            conditions.append("DATE(Timestamp)=DATE('now')")
         elif self.filterDateBox.currentIndex() == 3:    # Watched only
             conditions.append('Watched=1')
 
@@ -522,12 +506,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.rankFilterBox.value() > 0:
             conditions.append("CRank <= {}".format(self.rankFilterBox.value()))
 
-        # if self.weightFilterBox.value() > 0:
-        #     conditions.append("Weight <= {}".format(self.weightFilterBox.value()))
-        #
-        # if self.volumeFilterBox.value() > 0:
-        #     conditions.append("(ItemLength * ItemWidth * ItemHeight) <= {}".format(self.volumeFilterBox.value()))
-
         bigfilter = ' AND '.join(conditions)
 
         self.productsModel.setFilter(bigfilter)
@@ -551,7 +529,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.applyFilters()
 
     @pyqtSlot()
-    def queueNewSearch(self):
+    def newSearch(self):
         keywords = self.keywordsLine.text()
         searchindexes = [x.text() for x in self.searchIndexList.selectedItems()]
         minprice = self.minPriceSearchBox.value()
@@ -569,91 +547,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.searchStatusList.addItem(message)
         self.searchStatusList.scrollToBottom()
 
-    @pyqtSlot(ListingData)
-    def processSearchResult(self, listing):
-        q1 = QSqlQuery()
-        q2 = QSqlQuery()
-
-        # Add the product group if it isn't there already
-        q1.exec_("INSERT OR IGNORE INTO ProductGroups(ProductGroupName) VALUES('{}')".format(listing.productgroup))
-        q1.exec_("SELECT ProductGroupId FROM ProductGroups WHERE ProductGroupName='{}'".format(listing.productgroup))
-        q1.first()
-
-        productgroupId = q1.value(0)
-
-        # Get the category association
-        q1.exec_("SELECT CategoryId FROM ProductGroups WHERE ProductGroupId={}".format(productgroupId))
-        q1.first()
-
-        categoryId = q1.value(0)
-        watched = False
-        myprice = 0
-        mycost = 0
-        fbafees = 0
-        monthlyvolume = 0
-
-        # Check if the listing has already been added to the database
-        q1.exec_("SELECT * FROM Products WHERE Asin='{}'".format(listing.asin))
-        q1.first()
-        if q1.isValid():
-            # The listing is already in the database. Add it's current values to the observation table
-            q2.prepare("INSERT INTO Observations(Asin, Timestamp, SalesRank, Offers, Prime, Price) "
-                       "VALUES(?, ?, ?, ?, ?, ?)")
-            q2.addBindValue(q1.value(q1.record().indexOf('Asin')))
-            q2.addBindValue(q1.value(q1.record().indexOf('Timestamp')))
-            q2.addBindValue(q1.value(q1.record().indexOf('SalesRank')))
-            q2.addBindValue(q1.value(q1.record().indexOf('Offers')))
-            q2.addBindValue(q1.value(q1.record().indexOf('Prime')))
-            q2.addBindValue(q1.value(q1.record().indexOf('Price')))
-            q2.exec_()
-
-            # Grab values that we don't want to overwrite
-            q1.exec_("SELECT Watched, MyPrice, MyCost, FBAFees, MonthlyVolume FROM Products WHERE Asin='{}'".format(listing.asin))
-            q1.first()
-            watched = q1.value(0)
-            myprice = q1.value(1)
-            mycost = q1.value(2)
-            fbafees = q1.value(3)
-            monthlyvolume = q1.value(4)
-
-
-        # Calculate the CRank
-        crank = self.getRanking(categoryId, listing.salesrank, listing.offers, listing.prime)
-
-        # Determine if it is a private label product
-        if (fuzz.partial_ratio(listing.merchant.lower(), listing.title.lower()) > 80) or \
-                (fuzz.partial_ratio(listing.merchant.lower(), listing.make.lower()) > 80):
-            privatelabel = True
-        else:
-            privatelabel = False
-
-        q1.prepare('INSERT OR REPLACE INTO Products(Watched, CRank, Asin, ProductGroupId, CategoryId, SalesRank, Offers,'
-                   'Prime, Price, Merchant, Title, Url, PrivateLabel, Manufacturer, PartNumber, Weight, ItemLength,'
-                   'ItemWidth, ItemHeight, MyPrice, MyCost, FBAFees, MonthlyVolume, UPC) '
-                   'VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-
-        fields = [watched, crank, listing.asin, productgroupId, categoryId, listing.salesrank, listing.offers,
-                  listing.prime, listing.price, listing.merchant, listing.title, listing.url, privatelabel,
-                  listing.make, listing.model, listing.weight/100, listing.length/100,
-                  listing.width/100, listing.height/100, myprice, mycost, fbafees, monthlyvolume, listing.upc]
-
-        for field in fields:
-            q1.addBindValue(field)
-
-        q1.exec_()
-
-        if q1.lastError().type() != QSqlError.NoError:
-            print('Could not insert record: ' + q1.lastError().text())
-
-        self.productsModel.select()
-
     def updateObservations(self, index):
         asincol = self.productsModel.fieldIndex('Asin')
         index = self.productsModel.index(index.row(), asincol)
         asin = self.productsModel.data(index, Qt.DisplayRole)
 
-        self.obsModel.setFilter("Asin='{}'".format(asin))
-        self.obsModel.select()
+        self.historyModel.setFilter("Asin='{}'".format(asin))
+        self.historyModel.select()
 
     def timerEvent(self, event):
         self.updateWatched()
