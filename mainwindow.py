@@ -11,6 +11,7 @@ from fuzzywuzzy import fuzz
 from mainwindow_ui import *
 from categoriesdialog import *
 from productsmodel import ProductsTableModel
+from historymodel import ProductHistoryModel
 from delegates import *
 from searchamazon import AmazonSearchEngine, ListingData
 from initdb import *
@@ -30,10 +31,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.initDatabase()
         self.initAmazonSearchEngine()
         self.initProductsModelView()
-        self.initHistoryModelView()
-        self.initCategoriesDialog()
         self.initDataWidgetMapper()
+        self.initHistoryModelView()
         self.initHistoryChart()
+        self.initCategoriesDialog()
 
         # Set up UI connections
         self.keywordsLine.returnPressed.connect(self.newSearch)
@@ -140,9 +141,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def initHistoryModelView(self):
         # Initialize the model
-        self.historyModel = QSqlRelationalTableModel(self)
-        self.historyModel.setTable('Observations')
-        self.historyModel.select()
+        self.historyModel = ProductHistoryModel(self)
+        self.updateHistoryView()
 
         # Set up the table view
         self.historyTable.setModel(self.historyModel)
@@ -165,7 +165,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.historyTable.setItemDelegateForColumn(self.historyModel.fieldIndex('Timestamp'), tolocaltime)
 
         # Make connections
-        self.productsTable.selectionModel().currentRowChanged.connect(self.updateObservations)
+        self.productsTable.selectionModel().currentRowChanged.connect(self.updateHistoryView)
         self.historyTable.setContextMenuPolicy(Qt.CustomContextMenu)
         self.historyTable.customContextMenuRequested.connect(self.chooseHistoryViewMenu)
 
@@ -217,7 +217,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.myCostBox.valueChanged.connect(self.calculateProfits)
         self.fbaFeesBox.valueChanged.connect(self.calculateProfits)
         self.monthlyVolumeBox.valueChanged.connect(self.calculateProfits)
-
 
     def initHistoryChart(self):
         # Get rid of the placeholder put there by Qt Designer
@@ -547,14 +546,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.searchStatusList.addItem(message)
         self.searchStatusList.scrollToBottom()
 
-    def updateObservations(self, index):
-        asincol = self.productsModel.fieldIndex('Asin')
-        index = self.productsModel.index(index.row(), asincol)
-        asin = self.productsModel.data(index, Qt.DisplayRole)
+    def updateHistoryView(self, index=QModelIndex()):
+        #asincol = self.productsModel.fieldIndex('Asin')
+        #index = self.productsModel.index(index.row(), asincol)
+        #asin = self.productsModel.data(index, Qt.DisplayRole)
+        asin = self.prodASINLine.text()
 
-        self.historyModel.setFilter("Asin='{}'".format(asin))
-        self.historyModel.select()
+        self.historyModel.setProduct(asin)
 
     def timerEvent(self, event):
         self.updateWatched()
-        print('Update!')
