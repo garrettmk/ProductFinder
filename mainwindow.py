@@ -7,11 +7,11 @@ import json
 from PyQt5.QtChart import *
 from PyQt5.QtGui import *
 
-from fuzzywuzzy import fuzz
 from mainwindow_ui import *
 from categoriesdialog import *
 from productsmodel import ProductsTableModel
 from historymodel import ProductHistoryModel
+from historychart import ProductHistoryChart
 from delegates import *
 from searchamazon import AmazonSearchEngine, ListingData
 from initdb import *
@@ -146,7 +146,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Set up the table view
         self.historyTable.setModel(self.historyModel)
-        self.historyTable.horizontalHeader().setSectionHidden(self.historyModel.fieldIndex('Asin'), True)
         self.historyTable.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
         # Install delegates
@@ -228,7 +227,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.historyChartView.setRenderHint(QPainter.Antialiasing)
         self.historyChartView.setContextMenuPolicy(Qt.CustomContextMenu)
 
-        self.productsTable.selectionModel().currentRowChanged.connect(self.updateHistoryChart)
+        self.historyChart = ProductHistoryChart()
+        self.historyChart.setModel(self.historyModel)
+        self.historyChartView.setChart(self.historyChart)
+
+        self.historyModel.modelReset.connect(self.historyChart.modelUpdated)
         self.historyChartView.customContextMenuRequested.connect(self.chooseHistoryViewMenu)
 
     @pyqtSlot(QModelIndex, QModelIndex)
@@ -547,9 +550,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.searchStatusList.scrollToBottom()
 
     def updateHistoryView(self, index=QModelIndex()):
-        #asincol = self.productsModel.fieldIndex('Asin')
-        #index = self.productsModel.index(index.row(), asincol)
-        #asin = self.productsModel.data(index, Qt.DisplayRole)
         asin = self.prodASINLine.text()
 
         self.historyModel.setProduct(asin)
