@@ -49,7 +49,7 @@ class ProductHistoryModel(QSqlTableModel):
 
             for field in self.fields:
                 if field == 'Timestamp':
-                    points[field].append(QDateTime.fromString(record.value(field)).toMSecsSinceEpoch())
+                    points[field].append(QDateTime.fromString(record.value(field), Qt.ISODate).toMSecsSinceEpoch())
                 else:
                     points[field].append(record.value(field))
 

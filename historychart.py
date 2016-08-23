@@ -15,7 +15,7 @@ class ProductHistoryChart(QChart):
 
         # Create the axes and add them to the chart
         self.timeAxis = QDateTimeAxis()
-        self.timeAxis.setFormat('MM/dd hh:mm')
+        self.timeAxis.setFormat('M/dd hh:mm')
         self.timeAxis.setTitleText('Date/Time')
         self.addAxis(self.timeAxis, Qt.AlignBottom)
 
@@ -40,17 +40,23 @@ class ProductHistoryChart(QChart):
         self.rankSeries.attachAxis(self.timeAxis)
         self.rankSeries.attachAxis(self.rankAxis)
         self.rankSeries.setPointsVisible(True)
+        self.rankAxis.setLinePenColor(self.rankSeries.color())
+        self.rankAxis.setLabelsColor(self.rankSeries.color())
 
         self.priceSeries = QLineSeries()
         self.addSeries(self.priceSeries)
         self.priceSeries.attachAxis(self.priceAxis)
         self.priceSeries.attachAxis(self.timeAxis)
         self.priceSeries.setPointsVisible(True)
+        self.priceAxis.setLinePenColor(self.priceSeries.color())
+        self.priceAxis.setLabelsColor(self.priceSeries.color())
 
         self.offerLineSeries = QLineSeries()
         self.addSeries(self.offerLineSeries)
         self.offerLineSeries.attachAxis(self.offersAxis)
         self.offerLineSeries.attachAxis(self.timeAxis)
+        self.offersAxis.setLinePenColor(self.offerLineSeries.color())
+        self.offersAxis.setLabelsColor(self.offerLineSeries.color())
 
         self.offerPointSeries = QScatterSeries()
         self.addSeries(self.offerPointSeries)
@@ -62,6 +68,7 @@ class ProductHistoryChart(QChart):
         self.offerPointSeries.setPointsVisible(True)
 
         self.legend().hide()
+        self.setFlags(QGraphicsItem.ItemIsFocusable | QGraphicsItem.ItemIsSelectable)
 
     def setModel(self, model):
         self.model = model
@@ -95,8 +102,11 @@ class ProductHistoryChart(QChart):
         self.resetAxes()
 
     def resetAxes(self):
-        self.timeAxis.setMin(QDateTime.fromMSecsSinceEpoch(self.model.min('Timestamp')).addDays(-1))
-        self.timeAxis.setMin(QDateTime.fromMSecsSinceEpoch(self.model.max('Timestamp')).addDays(1))
+        timemin = QDateTime.fromMSecsSinceEpoch(self.model.min('Timestamp')).addDays(-1)
+        timemax = QDateTime.fromMSecsSinceEpoch(self.model.max('Timestamp')).addDays(1)
+
+        self.timeAxis.setMin(timemin.toLocalTime())
+        self.timeAxis.setMax(timemax.toLocalTime())
 
         self.rankAxis.setMin(0)
         self.rankAxis.setMax((self.model.max('SalesRank') * 1.1 // 1000 + 1) * 1000)
@@ -113,11 +123,15 @@ class ProductHistoryChart(QChart):
             return True
 
         if event.type() == QEvent.GraphicsSceneMouseDoubleClick:
+            self.zoomReset()
             self.resetAxes()
             return True
 
         if event.type() == QEvent.GraphicsSceneMouseMove:
             delta = event.pos() - event.lastPos()
             self.scroll(-delta.x(), delta.y())
+            return True
+
+        print(event.type())
 
         return super(ProductHistoryChart, self).sceneEvent(event)
