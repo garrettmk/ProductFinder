@@ -231,7 +231,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.historyChart.setModel(self.historyModel)
         self.historyChartView.setChart(self.historyChart)
 
-        self.historyModel.modelReset.connect(self.historyChart.modelUpdated)
         self.historyChartView.customContextMenuRequested.connect(self.chooseHistoryViewMenu)
 
     @pyqtSlot(QModelIndex, QModelIndex)

@@ -3,6 +3,7 @@ import math
 from PyQt5.QtCore import *
 from PyQt5.QtChart import *
 from PyQt5.QtGui import *
+from PyQt5.QtWidgets import *
 
 
 class ProductHistoryChart(QChart):
@@ -12,13 +13,14 @@ class ProductHistoryChart(QChart):
 
         self.model = None
 
+        # Create the axes and add them to the chart
         self.timeAxis = QDateTimeAxis()
         self.timeAxis.setFormat('MM/dd hh:mm')
         self.timeAxis.setTitleText('Date/Time')
         self.addAxis(self.timeAxis, Qt.AlignBottom)
 
         self.rankAxis = QValueAxis()
-        self.rankAxis.setLabelFormat('%\'u')
+        self.rankAxis.setLabelFormat('%\'i')
         self.rankAxis.setTitleText('Sales Rank')
         self.addAxis(self.rankAxis, Qt.AlignLeft)
 
@@ -28,10 +30,11 @@ class ProductHistoryChart(QChart):
         self.addAxis(self.priceAxis, Qt.AlignRight)
 
         self.offersAxis = QValueAxis()
-        self.offersAxis.setLabelFormat('%u')
+        self.offersAxis.setLabelFormat('%i')
         self.offersAxis.setTitleText('Offers')
         self.addAxis(self.offersAxis, Qt.AlignRight)
 
+        # Create the series, add them to the chart, and attach the axes.
         self.rankSeries = QLineSeries()
         self.addSeries(self.rankSeries)
         self.rankSeries.attachAxis(self.timeAxis)
@@ -58,54 +61,63 @@ class ProductHistoryChart(QChart):
         self.offerPointSeries.attachAxis(self.timeAxis)
         self.offerPointSeries.setPointsVisible(True)
 
-        self.timedata = []
-
         self.legend().hide()
 
     def setModel(self, model):
         self.model = model
+        self.modelUpdated()
+        self.model.modelReset.connect(self.modelUpdated)
 
     def modelUpdated(self):
         self.rankSeries.clear()
         self.priceSeries.clear()
         self.offerLineSeries.clear()
         self.offerPointSeries.clear()
-        self.timedata.clear()
-
-        ranks = []
-        prices = []
-        offers = []
 
         for row in range(self.model.rowCount()):
             record = self.model.record(row)
 
-            timestamp = QDateTime.fromString(record.value('Timestamp'), Qt.ISODate)
-            timestamp.setTimeSpec(Qt.UTC)
-            self.timedata.append(timestamp.toLocalTime().toMSecsSinceEpoch())
+            time = QDateTime.fromString(record.value('Timestamp'), Qt.ISODate)
+            time.setTimeSpec(Qt.UTC)
+            time = time.toLocalTime().toMSecsSinceEpoch()
 
-            ranks.append(record.value('SalesRank'))
-            prices.append(record.value('Price'))
-            offers.append(record.value('Offers'))
+            self.rankSeries.append(time, record.value('SalesRank'))
+            self.priceSeries.append(time, record.value('Price'))
+            self.offerPointSeries.append(time, record.value('Offers'))
 
-            self.rankSeries.append(self.timedata[-1], ranks[-1])
-            self.priceSeries.append(self.timedata[-1], prices[-1])
-            self.offerPointSeries.append(self.timedata[-1], offers[-1])
-
-            point = self.offerLineSeries.at(self.offerLineSeries.count() - 1)
-            point.setX(self.timedata[-1])
-            self.offerLineSeries.append(point)
-            self.offerLineSeries.append(self.timedata[-1], offers[-1])
+            prev = self.offerLineSeries.at(self.offerLineSeries.count() - 1)
+            prev.setX(time)
+            self.offerLineSeries.append(time, prev.y())
+            self.offerLineSeries.append(time, record.value('Offers'))
 
         self.offerLineSeries.remove(0)
 
-        self.timeAxis.setMin(QDateTime.fromMSecsSinceEpoch(self.timedata[0]).addDays(-1))
-        self.timeAxis.setMax(QDateTime.fromMSecsSinceEpoch(self.timedata[-1]).addDays(1))
+        self.resetAxes()
+
+    def resetAxes(self):
+        self.timeAxis.setMin(QDateTime.fromMSecsSinceEpoch(self.model.min('Timestamp')).addDays(-1))
+        self.timeAxis.setMin(QDateTime.fromMSecsSinceEpoch(self.model.max('Timestamp')).addDays(1))
 
         self.rankAxis.setMin(0)
-        self.rankAxis.setMax((max(ranks) * 1.1 // 1000 + 1) * 1000)
+        self.rankAxis.setMax((self.model.max('SalesRank') * 1.1 // 1000 + 1) * 1000)
 
-        self.priceAxis.setMin((min(prices) // 5 - 1) * 5)
-        self.priceAxis.setMax((max(prices) * 1.1 // 5 + 1) * 5)
+        self.priceAxis.setMin((self.model.min('Price') // 5 - 1) * 5)
+        self.priceAxis.setMax((self.model.max('Price') // 5 + 1) * 5)
 
         self.offersAxis.setMin(0)
-        self.offersAxis.setMax((max(offers) * 1.1 // 5 + 1) * 5)
+        self.offersAxis.setMax((self.model.max('Offers') * 1.1 // 5 + 1) * 5)
+
+    def sceneEvent(self, event):
+        if event.type() == QEvent.GraphicsSceneWheel and event.orientation() == Qt.Vertical:
+            self.zoom(1.1 if event.delta() > 0 else 0.9)
+            return True
+
+        if event.type() == QEvent.GraphicsSceneMouseDoubleClick:
+            self.resetAxes()
+            return True
+
+        if event.type() == QEvent.GraphicsSceneMouseMove:
+            delta = event.pos() - event.lastPos()
+            self.scroll(-delta.x(), delta.y())
+
+        return super(ProductHistoryChart, self).sceneEvent(event)
