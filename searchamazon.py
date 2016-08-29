@@ -128,7 +128,12 @@ class AmazonSearchEngine(QThread):
                 return
 
             self.message.emit('Looking up {}...'.format(asin))
-            response = self.bottlenose.ItemLookup(ErrorHandler=self._bottlenose_error_handler, ItemId=asin, ResponseGroup=self.responsegroups)
+
+            try:
+                response = self.bottlenose.ItemLookup(ErrorHandler=self._bottlenose_error_handler, ItemId=asin, ResponseGroup=self.responsegroups)
+            except HTTPError as e:
+                self.message.emit(repr(e))
+
             if not self._validate(response):
                 continue
 
@@ -154,8 +159,12 @@ class AmazonSearchEngine(QThread):
                 if self.abort:
                     return
 
-                response = self.bottlenose.ItemSearch(ErrorHandler=self._bottlenose_error_handler, Keywords=op.keywords,
-                                                      SearchIndex=index, ResponseGroup=self.responsegroups, ItemPage=page)
+                try:
+                    response = self.bottlenose.ItemSearch(ErrorHandler=self._bottlenose_error_handler, Keywords=op.keywords,
+                                                          SearchIndex=index, ResponseGroup=self.responsegroups, ItemPage=page)
+                except HTTPError as e:
+                    self.message.emit(repr(e))
+
                 if not self._validate(response):
                     break
 
