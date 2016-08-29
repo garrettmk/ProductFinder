@@ -6,6 +6,34 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
 
+class Callout(QGraphicsItem):
+
+    def __init__(self, parent = None):
+        super(Callout, self).__init__(parent)
+
+        self.text = ''
+        self.textrect = QRectF()
+
+        self.anchor = QPointF()
+        self.rect = QRectF()
+        self.font = QFont()
+
+    def setText(self, text):
+        self.text = text
+        metrics = QFontMetrics(self.font)
+
+        self.textrect = metrics.boundingRect(QRect(0, 0, 150, 150), Qt.AlignLeft, self.text)
+        self.prepareGeometryChange()
+        self.rect = QRectF(self.textrect.adjusted(-5, -5, 5, 5))
+
+    def boundingRect(self):
+        return self.rect
+
+    def paint(self, painter, option, widget):
+        painter.setBrush(QColor(Qt.white))
+        painter.drawRect(self.rect)
+        painter.drawText(self.textrect, Qt.AlignCenter | Qt.AlignVCenter, self.text)
+
 class ProductHistoryChart(QChart):
 
     def __init__(self, parent=None):
@@ -67,8 +95,36 @@ class ProductHistoryChart(QChart):
         self.offerPointSeries.attachAxis(self.timeAxis)
         self.offerPointSeries.setPointsVisible(True)
 
+        # Chart set-up
         self.legend().hide()
         self.setFlags(QGraphicsItem.ItemIsFocusable | QGraphicsItem.ItemIsSelectable)
+        self.acceptHoverEvents()
+
+        self.rankSeries.hovered.connect(self.seriesHovered)
+        self.priceSeries.hovered.connect(self.seriesHovered)
+        self.offerPointSeries.hovered.connect(self.seriesHovered)
+        self.callout = Callout(self)
+
+    def seriesHovered(self, point, show):
+        if show:
+            timestamp = QDateTime.fromMSecsSinceEpoch(point.x()).toString('M/d H:mm A')
+
+            series = self.sender()
+            if series is self.rankSeries:
+                value = 'Rank: {:,}'.format(int(point.y()))
+            elif series is self.priceSeries:
+                value = 'Price: ${:,.2f}'.format(point.y())
+            elif series is self.offerPointSeries:
+                value = 'Offers: {:,}'.format(int(point.y()))
+            else:
+                value = ':-('
+
+            self.callout.setText('{}\n{}'.format(timestamp, value))
+            self.callout.setPos(self.mapToPosition(point, self.sender()) + QPointF(20, -15))
+            self.callout.setZValue(11)
+            self.callout.show()
+        else:
+            self.callouts[-1].hide()
 
     def setModel(self, model):
         self.model = model
@@ -131,7 +187,5 @@ class ProductHistoryChart(QChart):
             delta = event.pos() - event.lastPos()
             self.scroll(-delta.x(), delta.y())
             return True
-
-        print(event.type())
 
         return super(ProductHistoryChart, self).sceneEvent(event)
