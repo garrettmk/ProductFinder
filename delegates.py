@@ -62,8 +62,5 @@ class TimestampToLocalDelegate(QStyledItemDelegate):
         super(TimestampToLocalDelegate, self).__init__(parent)
 
     def displayText(self, value, locale):
-        utc = QDateTime.fromString(value, Qt.ISODate)
-        utc.setTimeSpec(Qt.UTC)
-
-        return utc.toLocalTime().toString('MM-dd-yy hh:mm:ss')
+        return QDateTime.fromTime_t(value, Qt.UTC).toLocalTime().toString('MM-dd-yy hh:mm:ss')
 

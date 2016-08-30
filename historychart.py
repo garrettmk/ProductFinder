@@ -107,7 +107,7 @@ class ProductHistoryChart(QChart):
 
     def seriesHovered(self, point, show):
         if show:
-            timestamp = QDateTime.fromMSecsSinceEpoch(point.x()).toString('M/d H:mm')
+            timestamp = QDateTime.fromTime_t(point.x()).toString('M/d H:mm')
 
             series = self.sender()
             if series is self.rankSeries:
@@ -140,9 +140,8 @@ class ProductHistoryChart(QChart):
         for row in range(self.model.rowCount()):
             record = self.model.record(row)
 
-            time = QDateTime.fromString(record.value('Timestamp'), Qt.ISODate)
-            time.setTimeSpec(Qt.UTC)
-            time = time.toLocalTime().toMSecsSinceEpoch()
+            time = QDateTime.fromTime_t(record.value('Timestamp'), Qt.UTC)
+            time = time.toLocalTime().toTime_t()
 
             self.rankSeries.append(time, record.value('SalesRank'))
             self.priceSeries.append(time, record.value('Price'))
@@ -158,8 +157,8 @@ class ProductHistoryChart(QChart):
         self.resetAxes()
 
     def resetAxes(self):
-        timemin = QDateTime.fromMSecsSinceEpoch(self.model.min('Timestamp')).addDays(-1)
-        timemax = QDateTime.fromMSecsSinceEpoch(self.model.max('Timestamp')).addDays(1)
+        timemin = QDateTime.fromTime_t(self.model.min('Timestamp')).addDays(-1)
+        timemax = QDateTime.fromTime_t(self.model.max('Timestamp')).addDays(1)
 
         self.timeAxis.setMin(timemin.toLocalTime())
         self.timeAxis.setMax(timemax.toLocalTime())

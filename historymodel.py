@@ -42,10 +42,6 @@ class ProductHistoryModel(QSqlTableModel):
         if self.rowCount() == 0:
             self.mins = dict.fromkeys(self.fields, 0)
             self.maxes = dict.fromkeys(self.fields, 0)
-
-            today = QDateTime.currentDateTimeUtc()
-            self.mins['Timestamp'] = today.toMSecsSinceEpoch()
-            self.maxes['Timestamp'] = today.toMSecsSinceEpoch()
             return
 
         points = dict([(field, []) for field in self.fields])
@@ -54,10 +50,7 @@ class ProductHistoryModel(QSqlTableModel):
             record = self.record(row)
 
             for field in self.fields:
-                if field == 'Timestamp':
-                    points[field].append(QDateTime.fromString(record.value(field), Qt.ISODate).toMSecsSinceEpoch())
-                else:
-                    points[field].append(record.value(field))
+                points[field].append(record.value(field))
 
         for field in self.fields:
             self.mins[field] = min(points[field])
