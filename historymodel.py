@@ -17,8 +17,9 @@ class ProductHistoryModel(QSqlTableModel):
         self.setProduct(asin)
 
     def setProduct(self, asin):
-        q = QSqlQuery('SELECT Timestamp, SalesRank, Offers, Prime, Price FROM Observations WHERE Asin=\'{}\' UNION '
-                      'SELECT Timestamp, SalesRank, Offers, Prime, Price FROM Products WHERE Asin=\'{}\''.format(asin, asin))
+        q = QSqlQuery('SELECT Timestamp, SalesRank, Offers, Prime, Price FROM Products WHERE Asin=\'{}\' UNION '
+                      'SELECT Timestamp, SalesRank, Offers, Prime, Price FROM Observations WHERE Asin=\'{}\' '
+                      'ORDER BY Timestamp'.format(asin, asin))
 
         if q.lastError().type() != QSqlError.NoError:
             logging.debug('ProductHistoryModel: Could not select \'{}\' from database. Error message: \'{}\''.format(asin, q.lastError().text()))

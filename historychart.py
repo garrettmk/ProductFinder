@@ -107,7 +107,7 @@ class ProductHistoryChart(QChart):
 
     def seriesHovered(self, point, show):
         if show:
-            timestamp = QDateTime.fromMSecsSinceEpoch(point.x()).toString('M/d H:mm A')
+            timestamp = QDateTime.fromMSecsSinceEpoch(point.x()).toString('M/d H:mm')
 
             series = self.sender()
             if series is self.rankSeries:
@@ -124,7 +124,7 @@ class ProductHistoryChart(QChart):
             self.callout.setZValue(11)
             self.callout.show()
         else:
-            self.callouts[-1].hide()
+            self.callout.hide()
 
     def setModel(self, model):
         self.model = model
