@@ -17,9 +17,10 @@ class ProductHistoryModel(QSqlTableModel):
         self.setProduct(asin)
 
     def setProduct(self, asin):
+        """Populate the model with the 256 most recent data points for the specified ASIN."""
         q = QSqlQuery('SELECT Timestamp, SalesRank, Offers, Prime, Price FROM Products WHERE Asin=\'{}\' UNION '
                       'SELECT Timestamp, SalesRank, Offers, Prime, Price FROM Observations WHERE Asin=\'{}\' '
-                      'ORDER BY Timestamp'.format(asin, asin))
+                      'ORDER BY Timestamp DESC'.format(asin, asin))
 
         if q.lastError().type() != QSqlError.NoError:
             logging.debug('ProductHistoryModel: Could not select \'{}\' from database. Error message: \'{}\''.format(asin, q.lastError().text()))
@@ -31,6 +32,10 @@ class ProductHistoryModel(QSqlTableModel):
             return False
 
         return True
+
+    def fetchAll(self):
+        while self.canFetchMore():
+            self.fetchMore()
 
     def computeStatistics(self):
 
