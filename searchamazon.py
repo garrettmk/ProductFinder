@@ -131,7 +131,7 @@ class AmazonSearchEngine(QThread):
 
             try:
                 response = self.bottlenose.ItemLookup(ErrorHandler=self._bottlenose_error_handler, ItemId=asin, ResponseGroup=self.responsegroups)
-            except HTTPError as e:
+            except Exception as e:
                 self.message.emit(repr(e))
 
             if not self._validate(response):
@@ -162,7 +162,7 @@ class AmazonSearchEngine(QThread):
                 try:
                     response = self.bottlenose.ItemSearch(ErrorHandler=self._bottlenose_error_handler, Keywords=op.keywords,
                                                           SearchIndex=index, ResponseGroup=self.responsegroups, ItemPage=page)
-                except HTTPError as e:
+                except Exception as e:
                     self.message.emit(repr(e))
 
                 if not self._validate(response):
