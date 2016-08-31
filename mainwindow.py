@@ -141,7 +141,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def initHistoryModelView(self):
         # Initialize the model
         self.historyModel = ProductHistoryModel(self)
-        self.updateHistoryView()
 
         # Set up the table view
         self.historyTable.setModel(self.historyModel)

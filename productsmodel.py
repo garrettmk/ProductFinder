@@ -107,13 +107,15 @@ class ProductsTableModel(QSqlRelationalTableModel):
         else:
             privatelabel = False
 
+        time = QDateTime.currentDateTimeUtc().toTime_t()
+
         q.prepare(
-            'INSERT OR REPLACE INTO Products(Watched, CRank, Asin, ProductGroupId, CategoryId, SalesRank, Offers,'
+            'INSERT OR REPLACE INTO Products(Watched, CRank, Timestamp, Asin, ProductGroupId, CategoryId, SalesRank, Offers,'
             'Prime, Price, Merchant, Title, Url, PrivateLabel, Manufacturer, PartNumber, Weight, ItemLength,'
             'ItemWidth, ItemHeight, MyPrice, MyCost, FBAFees, MonthlyVolume, UPC) '
-            'VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            'VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
 
-        fields = [watched, crank, listing.asin, productgroupId, categoryId, listing.salesrank, listing.offers,
+        fields = [watched, crank, time, listing.asin, productgroupId, categoryId, listing.salesrank, listing.offers,
                   listing.prime, listing.price, listing.merchant, listing.title, listing.url, privatelabel,
                   listing.make, listing.model, listing.weight / 100, listing.length / 100,
                   listing.width / 100, listing.height / 100, myprice, mycost, fbafees, monthlyvolume, listing.upc]
