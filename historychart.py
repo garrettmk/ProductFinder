@@ -128,6 +128,7 @@ class ProductHistoryChart(QChart):
 
     def setModel(self, model):
         self.model = model
+
         self.modelUpdated()
         self.model.modelReset.connect(self.modelUpdated)
 
@@ -140,8 +141,7 @@ class ProductHistoryChart(QChart):
         for row in range(self.model.rowCount()):
             record = self.model.record(row)
 
-            time = QDateTime.fromString(record.value('Timestamp'), Qt.ISODate)
-            time.setTimeSpec(Qt.UTC)
+            time = QDateTime.fromTime_t(record.value('Timestamp'), Qt.UTC)
             time = time.toLocalTime().toMSecsSinceEpoch()
 
             self.rankSeries.append(time, record.value('SalesRank'))
@@ -158,8 +158,8 @@ class ProductHistoryChart(QChart):
         self.resetAxes()
 
     def resetAxes(self):
-        timemin = QDateTime.fromMSecsSinceEpoch(self.model.min('Timestamp')).addDays(-1)
-        timemax = QDateTime.fromMSecsSinceEpoch(self.model.max('Timestamp')).addDays(1)
+        timemin = QDateTime.fromTime_t(self.model.min('Timestamp')).addDays(-1)
+        timemax = QDateTime.fromTime_t(self.model.max('Timestamp')).addDays(1)
 
         self.timeAxis.setMin(timemin.toLocalTime())
         self.timeAxis.setMax(timemax.toLocalTime())

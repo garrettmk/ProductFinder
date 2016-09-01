@@ -11,7 +11,7 @@ def setupDatabaseTables():
     q.exec_('CREATE TABLE IF NOT EXISTS Products('
                'Watched BOOL DEFAULT 0, '
                'CRank INT, '
-               'Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, '
+               'Timestamp INT, '
                'Asin VARCHAR PRIMARY KEY, '
                'ProductGroupId INT, '
                'CategoryId INT DEFAULT 1,'
@@ -48,7 +48,7 @@ def setupDatabaseTables():
 
     q.exec_('CREATE TABLE IF NOT EXISTS Observations('
                'Asin VARCHAR, '
-               'Timestamp DATETIME, '
+               'Timestamp INT, '
                'SalesRank INT, '
                'Offers INT, '
                'Prime BOOL, '

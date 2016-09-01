@@ -1,4 +1,3 @@
-import datetime
 import webbrowser
 import requests
 import logging
@@ -95,7 +94,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.amazon = AmazonSearchEngine(config=self.config['amz'])
         self.amazon.message.connect(self.statusMessage)
 
-        self.lastSearchTime = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.lastSearchTime = QDateTime.currentDateTimeUtc().toTime_t()
 
     def initProductsModelView(self):
         # Initialize the model
@@ -142,7 +141,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def initHistoryModelView(self):
         # Initialize the model
         self.historyModel = ProductHistoryModel(self)
-        self.updateHistoryView()
 
         # Set up the table view
         self.historyTable.setModel(self.historyModel)
@@ -283,10 +281,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                       'SELECT Timestamp, SalesRank, Price FROM Products WHERE Asin=\'{}\''.format(asin, asin))
 
         while q.next():
-            timestamp = QDateTime.fromString(q.value(0), Qt.ISODate)
-            timestamp.setTimeSpec(Qt.UTC)
+            timestamp = QDateTime.fromTime_t(q.value(0), Qt.UTC)
 
-            moments.append(timestamp.toLocalTime().toMSecsSinceEpoch())
+            moments.append(timestamp.toLocalTime().toTime_t())
             ranks.append(q.value(1))
             prices.append(q.value(2))
 
@@ -469,7 +466,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.filterDateBox.currentIndex() == 0:      # All results
             pass
         elif self.filterDateBox.currentIndex() == 1:    # Last search only
-            conditions.append("Timestamp >= '{}'".format(self.lastSearchTime))
+            conditions.append("Timestamp >= {}".format(self.lastSearchTime))
         elif self.filterDateBox.currentIndex() == 2:    # Today only
             conditions.append("DATE(Timestamp)=DATE('now')")
         elif self.filterDateBox.currentIndex() == 3:    # Watched only
@@ -540,7 +537,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return
 
         # Note the time this search was started. Used for filtering.
-        self.lastSearchTime = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        self.lastSearchTime = QDateTime.currentDateTimeUtc().toTime_t()
         self.amazon.search(keywords, searchindexes, minprice, maxprice)
 
     @pyqtSlot(str)

@@ -1,5 +1,3 @@
-from PyQt5.QtCore import pyqtSlot
-from PyQt5.QtWidgets import QDialog
 from PyQt5.QtSql import *
 from categoriesdialog_ui import *
 from delegates import *
