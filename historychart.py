@@ -67,7 +67,7 @@ class ProductHistoryChart(QChart):
         self.addSeries(self.rankSeries)
         self.rankSeries.attachAxis(self.timeAxis)
         self.rankSeries.attachAxis(self.rankAxis)
-        self.rankSeries.setPointsVisible(True)
+        #self.rankSeries.setPointsVisible(True)
         self.rankAxis.setLinePenColor(self.rankSeries.color())
         self.rankAxis.setLabelsColor(self.rankSeries.color())
 
@@ -75,7 +75,7 @@ class ProductHistoryChart(QChart):
         self.addSeries(self.priceSeries)
         self.priceSeries.attachAxis(self.priceAxis)
         self.priceSeries.attachAxis(self.timeAxis)
-        self.priceSeries.setPointsVisible(True)
+        #self.priceSeries.setPointsVisible(True)
         self.priceAxis.setLinePenColor(self.priceSeries.color())
         self.priceAxis.setLabelsColor(self.priceSeries.color())
 
@@ -86,14 +86,14 @@ class ProductHistoryChart(QChart):
         self.offersAxis.setLinePenColor(self.offerLineSeries.color())
         self.offersAxis.setLabelsColor(self.offerLineSeries.color())
 
-        self.offerPointSeries = QScatterSeries()
-        self.addSeries(self.offerPointSeries)
-        self.offerPointSeries.setPen(QPen(Qt.NoPen))
-        self.offerPointSeries.setColor(self.offerLineSeries.color())
-        self.offerPointSeries.setMarkerSize(6)
-        self.offerPointSeries.attachAxis(self.offersAxis)
-        self.offerPointSeries.attachAxis(self.timeAxis)
-        self.offerPointSeries.setPointsVisible(True)
+        # self.offerPointSeries = QScatterSeries()
+        # self.addSeries(self.offerPointSeries)
+        # self.offerPointSeries.setPen(QPen(Qt.NoPen))
+        # self.offerPointSeries.setColor(self.offerLineSeries.color())
+        # self.offerPointSeries.setMarkerSize(6)
+        # self.offerPointSeries.attachAxis(self.offersAxis)
+        # self.offerPointSeries.attachAxis(self.timeAxis)
+        # self.offerPointSeries.setPointsVisible(True)
 
         # Chart set-up
         self.legend().hide()
@@ -102,7 +102,7 @@ class ProductHistoryChart(QChart):
 
         self.rankSeries.hovered.connect(self.seriesHovered)
         self.priceSeries.hovered.connect(self.seriesHovered)
-        self.offerPointSeries.hovered.connect(self.seriesHovered)
+        self.offerLineSeries.hovered.connect(self.seriesHovered)
         self.callout = Callout(self)
 
     def seriesHovered(self, point, show):
@@ -114,7 +114,7 @@ class ProductHistoryChart(QChart):
                 value = 'Rank: {:,}'.format(int(point.y()))
             elif series is self.priceSeries:
                 value = 'Price: ${:,.2f}'.format(point.y())
-            elif series is self.offerPointSeries:
+            elif series is self.offerLineSeries:
                 value = 'Offers: {:,}'.format(int(point.y()))
             else:
                 value = ':-('
@@ -136,7 +136,7 @@ class ProductHistoryChart(QChart):
         self.rankSeries.clear()
         self.priceSeries.clear()
         self.offerLineSeries.clear()
-        self.offerPointSeries.clear()
+        #self.offerPointSeries.clear()
 
         for row in range(self.model.rowCount()):
             record = self.model.record(row)
@@ -146,7 +146,7 @@ class ProductHistoryChart(QChart):
 
             self.rankSeries.append(time, record.value('SalesRank'))
             self.priceSeries.append(time, record.value('Price'))
-            self.offerPointSeries.append(time, record.value('Offers'))
+            #self.offerPointSeries.append(time, record.value('Offers'))
 
             prev = self.offerLineSeries.at(self.offerLineSeries.count() - 1)
             prev.setX(time)
