@@ -32,23 +32,21 @@ class Callout(QGraphicsItem):
         painter.drawRect(self.rect)
         painter.drawText(self.textrect, Qt.AlignCenter | Qt.AlignVCenter, self.text)
 
+
 class ProductHistoryChart(QChart):
 
     def __init__(self, parent=None):
         super(ProductHistoryChart, self).__init__(parent)
 
-        self.model = None
-
-        rcolor = QColor(Qt.darkCyan)
-        pcolor = QColor(Qt.darkGreen)
-        ocolor = QColor(Qt.darkMagenta)
+        rcolor = QColor(50, 130, 220)
+        pcolor = QColor(0, 200, 0)
+        ocolor = QColor(255, 175, 0)
 
         # Create the axes and add them to the chart
         self.timeAxis = QDateTimeAxis()
         self.timeAxis.setFormat('M/dd hh:mm')
         self.timeAxis.setTitleText('Date/Time')
         self.addAxis(self.timeAxis, Qt.AlignBottom)
-        self.timeAxis.minChanged.connect(self.loadHistoryUntil)
 
         self.rankAxis = QValueAxis()
         self.rankAxis.setLabelFormat('%\'i')
@@ -125,9 +123,32 @@ class ProductHistoryChart(QChart):
         self.rankPoints.hovered.connect(self.seriesHovered)
         self.pricePoints.hovered.connect(self.seriesHovered)
         self.offerPoints.hovered.connect(self.seriesHovered)
+
+        self.timeAxis.minChanged.connect(self.loadHistoryAfter)
+
         self.callout = Callout(self)
+        self.avgpointspan = 0
+        self.maxpointsshown = 100
+        self.model = None
+
+    def setMaxPointsShown(self, num):
+        """Set the approximate maximum number of points to show on the chart."""
+        self.maxpointsshown = num
+
+    def maybeShowPoints(self, min, max):
+        """Show or hide the data points, based on the span of the time axis and self.maxpointsshown."""
+        if self.avgpointspan and min.msecsTo(max) > self.avgpointspan * self.maxpointsshown:
+            self.rankPoints.setVisible(False)
+            self.pricePoints.setVisible(False)
+            self.offerPoints.setVisible(False)
+            self.callout.hide()
+        else:
+            self.rankPoints.setVisible(True)
+            self.pricePoints.setVisible(True)
+            self.offerPoints.setVisible(True)
 
     def seriesHovered(self, point, show):
+        """Show or hide the data point callout."""
         if show:
             timestamp = QDateTime.fromMSecsSinceEpoch(point.x()).toString('M/d H:mm')
 
@@ -149,12 +170,14 @@ class ProductHistoryChart(QChart):
             self.callout.hide()
 
     def setModel(self, model):
+        """Set the data model."""
         self.model = model
 
-        self.modelUpdated()
-        self.model.modelReset.connect(self.modelUpdated)
+        self.modelReset()
+        self.model.modelReset.connect(self.modelReset)
 
-    def modelUpdated(self):
+    def modelReset(self):
+        """Clear the series and load 5 days of data from the model."""
         self.rankLine.clear()
         self.rankPoints.clear()
         self.priceLine.clear()
@@ -164,35 +187,39 @@ class ProductHistoryChart(QChart):
 
         last = self.model.record(0).value('Timestamp')
         if last:
-            time = QDateTime.fromTime_t(last, Qt.LocalTime).addDays(-7)
-        else:
-            time = QDateTime.currentDateTimeUtc().addDays(-7)
+            time = QDateTime.fromTime_t(last, Qt.LocalTime).addDays(-5)
+            self.loadHistoryAfter(time)
 
-        self.loadHistoryUntil(time)
         self.resetAxes()
 
-    def loadHistoryUntil(self, cutoff=QDateTime.fromTime_t(0, Qt.UTC)):
+    def loadHistoryAfter(self, cutoff=QDateTime.fromTime_t(0, Qt.UTC)):
+        """Load data from the model from between cutoff and the current date."""
+        if not self.model.rowCount():
+            self.avgpointspan = 0
+            return
 
+        # Get the timestamp of the last data point in the series
         if self.rankPoints.count():
             last = self.rankPoints.at(self.rankPoints.count() - 1).x()
         else:
             last = QDateTime.currentDateTime().toMSecsSinceEpoch()
 
+        # Calculate the earliest timestamp already in the series, in seconds
         earliest = QDateTime.fromMSecsSinceEpoch(last, Qt.LocalTime)
         earliest = earliest.toTimeSpec(Qt.UTC)
         earliest = earliest.toTime_t()
 
+        # Calculate the cutoff timestamp in seconds
         cutoff = cutoff.toTimeSpec(Qt.UTC)
         cutoff = cutoff.toTime_t()
 
+        # Assume that we have already added all the data later than "earliest"
         for row in range(self.rankPoints.count(), self.model.rowCount()):
             record = self.model.record(row)
 
             time = record.value('Timestamp')
-            if time >= earliest:
-                continue
-            elif time < cutoff:
-                return
+            if time < cutoff:
+                break
 
             time = QDateTime.fromTime_t(time, Qt.UTC)
             time.toTimeSpec(Qt.LocalTime)
@@ -210,7 +237,16 @@ class ProductHistoryChart(QChart):
 
             self.offerLine.append(time, record.value('Offers'))
 
+        # Calculate the average span of time between each data point
+        points = self.rankPoints.pointsVector()
+        total = 0
+        for row in range(1, len(points)):
+            total += points[row-1].x() - points[row].x()
+
+        self.avgpointspan = total / len(points)
+
     def resetAxes(self):
+        """Scale the axes to fit the minimum and maximum values in each series."""
         r = self.rankPoints.pointsVector()
         p = self.pricePoints.pointsVector()
         o = self.offerPoints.pointsVector()
@@ -264,12 +300,15 @@ class ProductHistoryChart(QChart):
 
     def sceneEvent(self, event):
         if event.type() == QEvent.GraphicsSceneWheel and event.orientation() == Qt.Vertical:
-            self.zoom(1.1 if event.delta() > 0 else 0.9)
+            factor = 0.95 if event.delta() < 0 else 1.05
+            self.zoom(factor)
+            self.maybeShowPoints(self.timeAxis.min(), self.timeAxis.max())
             return True
 
         if event.type() == QEvent.GraphicsSceneMouseDoubleClick:
             self.zoomReset()
             self.resetAxes()
+            self.maybeShowPoints(self.timeAxis.min(), self.timeAxis.max())
             return True
 
         if event.type() == QEvent.GraphicsSceneMouseMove:
