@@ -1,6 +1,5 @@
 import webbrowser
 import requests
-import logging
 import json
 
 from PyQt5.QtChart import *
@@ -52,8 +51,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.upcLookupButton.clicked.connect(self.openUPCLookup)
 
         self.actionEdit_Categories.triggered.connect(self.editProductGroups)
-        self.actionUpdate_Watched.triggered.connect(self.updateWatched)
-        self.actionRecalculate_Rankings.triggered.connect(self.recalculateRankings)
         self.actionShow_Table.triggered.connect(self.showHistoryTable)
         self.actionShow_Graph.triggered.connect(self.showHistoryGraph)
 
@@ -61,7 +58,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.productsTable.selectRow(0)
         self.showHistoryGraph()
 
-        self.startTimer(3600000, Qt.CoarseTimer)
+        # Set up the update timers
+        self.trackingLevels = {0: 0,  # No tracking
+                                  1: 60 * 30,  # Half an hour
+                                  2: 60 * 60,  # One hour
+                                  3: 60 * 60 * 3,  # Three hours
+                                  4: 60 * 60 * 6,  # Six hours
+                                  5: 60 * 5}       # Five minutes
+
+        self.trackingTimers = {}
+        now = QDateTime.currentDateTimeUtc().toTime_t()
+
+        for level in filter(self.trackingLevels.get, self.trackingLevels):
+            self.trackingTimers[level] = QTimer(self)
+            q = QSqlQuery('SELECT Timestamp FROM Products WHERE Tracking = {} ORDER BY Timestamp ASC LIMIT 1'.format(level))
+            q.first()
+            if q.isValid():
+                timestamp = q.value(0)
+                nexttime = (timestamp + self.trackingLevels[level] - now) * 1000
+            else:
+                nexttime = self.trackingLevels[level] * 1000
+
+            self.trackingTimers[level].timeout.connect(self.updateTrackedProducts)
+            self.trackingTimers[level].start(nexttime if nexttime > 0 else 1)
+
 
     def initDatabase(self):
         # Check that the SQLite drive is available
@@ -118,6 +138,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         currency = CurrencyDelegate(self)
         yesno = YesNoComboDelegate(self)
         tolocaltime = TimestampToLocalDelegate(self)
+        levels = TrackingLevelDelegate(self)
+        levels.setLevels(5)
 
         for column in map(self.productsModel.fieldIndex, ['CRank', 'SalesRank', 'Offers']):
             self.productsTable.setItemDelegateForColumn(column, numbers)
@@ -125,9 +147,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for column in [self.productsModel.fieldIndex('Price')]:
             self.productsTable.setItemDelegateForColumn(column, currency)
 
-        for column in map(self.productsModel.fieldIndex, ['Watched', 'Prime', 'PrivateLabel']):
+        for column in map(self.productsModel.fieldIndex, ['Prime', 'PrivateLabel']):
             self.productsTable.setItemDelegateForColumn(column, yesno)
 
+        self.productsTable.setItemDelegateForColumn(self.productsModel.fieldIndex('Tracking'), levels)
         self.productsTable.setItemDelegateForColumn(self.productsModel.fieldIndex('Timestamp'), tolocaltime)
 
         # Hide some detail columns
@@ -264,74 +287,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.historyStack.setCurrentIndex(0)
 
     @pyqtSlot()
-    def updateHistoryChart(self):
-        asin = self.prodASINLine.text()
-        if not asin:
-            return
-
-        rankseries = QLineSeries()
-        priceseries = QLineSeries()
-
-        moments = []
-        ranks = []
-        prices = []
-
-        # Get the data from previous observations
-        q = QSqlQuery('SELECT Timestamp, SalesRank, Price FROM Observations WHERE Asin=\'{}\' UNION '
-                      'SELECT Timestamp, SalesRank, Price FROM Products WHERE Asin=\'{}\''.format(asin, asin))
-
-        while q.next():
-            timestamp = QDateTime.fromTime_t(q.value(0), Qt.UTC)
-
-            moments.append(timestamp.toLocalTime().toTime_t())
-            ranks.append(q.value(1))
-            prices.append(q.value(2))
-
-            rankseries.append(moments[-1], ranks[-1])
-            priceseries.append(moments[-1], prices[-1])
-
-        if len(moments) < 2:
-            chart = QChart()
-            chart.setTitle('Not enough data')
-            self.historyChartView.setChart(chart)
-            return
-
-        chart = QChart()
-
-        # Set up the X axis
-        axisX = QDateTimeAxis()
-        axisX.setFormat('MM/dd')
-        axisX.setTitleText('Date')
-        chart.legend().hide()
-        chart.addAxis(axisX, Qt.AlignBottom)
-
-        # Don't bother with the salesrank graph if they are all zeroes
-        if max(ranks) > 0:
-            axisL = QValueAxis()
-            axisL.setLabelFormat('%i')
-            axisL.setTitleText('Sales Rank')
-            axisL.setRange(min(ranks), max(ranks)+10)
-            chart.addSeries(rankseries)
-            chart.addAxis(axisL, Qt.AlignLeft)
-            rankseries.attachAxis(axisX)
-            rankseries.attachAxis(axisL)
-            rankseries.setPointsVisible(True)
-
-        # Set up the right axis (price)
-        if max(prices) > 0:
-            axisR = QValueAxis()
-            axisR.setLabelFormat('$%.2f')
-            axisR.setTitleText('Price')
-            axisR.setRange(min(prices), max(prices)*1.25)
-            chart.addSeries(priceseries)
-            chart.addAxis(axisR, Qt.AlignRight)
-            priceseries.attachAxis(axisX)
-            priceseries.attachAxis(axisR)
-            priceseries.setPointsVisible(True)
-
-        self.historyChartView.setChart(chart)
-
-    @pyqtSlot()
     def calculateProfits(self):
         myprice = self.myPriceBox.value()
         mycost = self.myCostBox.value()
@@ -347,30 +302,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.monthlyProfitBox.setValue(profit * volume)
 
         self.mapper.submit()
-
-    @pyqtSlot()
-    def recalculateRankings(self):
-        self.statusMessage('Recalculating rankings...')
-
-        q = QSqlQuery()
-        crankindex = self.productsModel.fieldIndex('CRank')
-
-        for row in range(self.productsModel.rowCount()):
-            record = self.productsModel.record(row)
-
-            asin = record.value('Asin')
-            salesrank = record.value('SalesRank')
-            offers = record.value('Offers')
-            prime = record.value('Prime')
-            catname = record.value('CategoryName')
-            q.exec_("SELECT CategoryId FROM Categories WHERE CategoryName='{}'".format(catname))
-            q.first()
-            categoryId = q.value(0)
-
-            crank = self.getRanking(categoryId, salesrank, offers, prime)
-            self.productsModel.setData(self.productsModel.index(row, crankindex), crank)
-
-        self.statusMessage('Rank calculations complete.')
 
     @pyqtSlot()
     def getFBAFees(self):
@@ -451,13 +382,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.categoriesDialog.open()
 
     @pyqtSlot()
-    def updateWatched(self):
+    def updateTrackedProducts(self):
+        level = 0
+        timer = self.sender()
+
+        for key, value in self.trackingTimers.items():
+            if value is timer:
+                level = key
+
+        if not level:
+            print('Could not determine tracking level to update.')
+            return
+
         asins = []
-        q = QSqlQuery('SELECT Asin FROM Products WHERE Watched=1')
+        q = QSqlQuery('SELECT Asin FROM Products WHERE Tracking = {} ORDER BY Timestamp ASC'.format(level))
         while q.next():
             asins.append(q.value(0))
 
-        self.amazon.lookup(asins)
+        # Finally - do the updates
+        if asins:
+            self.amazon.lookup(asins)
+
+        timer.setInterval(self.trackingLevels[level] * 1000)
 
     @pyqtSlot()
     def applyFilters(self):
@@ -469,8 +415,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             conditions.append("Timestamp >= {}".format(self.lastSearchTime))
         elif self.filterDateBox.currentIndex() == 2:    # Today only
             conditions.append("DATE(Timestamp)=DATE('now')")
-        elif self.filterDateBox.currentIndex() == 3:    # Watched only
-            conditions.append('Watched=1')
+        elif self.filterDateBox.currentIndex() == 3:    # Tracked products only
+            conditions.append('Tracking > 0')
 
         if self.withKeywordsLine.text():
             conditions.append("INSTR(LOWER(Title), LOWER('{}'))".format(self.withKeywordsLine.text()))
@@ -549,6 +495,3 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         asin = self.prodASINLine.text()
 
         self.historyModel.setProduct(asin)
-
-    def timerEvent(self, event):
-        self.updateWatched()

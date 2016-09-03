@@ -64,3 +64,32 @@ class TimestampToLocalDelegate(QStyledItemDelegate):
     def displayText(self, value, locale):
         return QDateTime.fromTime_t(value, Qt.UTC).toLocalTime().toString('MM-dd-yy hh:mm:ss')
 
+
+class TrackingLevelDelegate(QStyledItemDelegate):
+
+    def __init__(self, parent=None):
+        super(TrackingLevelDelegate, self).__init__(parent)
+        self.levels = 2
+
+    def setLevels(self, levels):
+        self.levels = levels
+
+    def displayText(self, value, locale):
+        return 'Level {}'.format(value) if value > 0 else 'None'
+
+    def createEditor(self, parent, options, index):
+        box = QComboBox(parent)
+
+        for level in range(self.levels):
+            box.addItem('Level {}'.format(level))
+
+        return box
+
+    def setEditorData(self, editor, index):
+        data = str(index.data(Qt.EditRole))
+        if data.isdigit():
+            editor.setCurrentIndex(int(data))
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.currentIndex(), Qt.EditRole)
+

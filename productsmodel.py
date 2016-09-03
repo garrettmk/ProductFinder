@@ -65,7 +65,7 @@ class ProductsTableModel(QSqlRelationalTableModel):
         q.first()
 
         categoryId = q.value(0)
-        watched = False
+        tracking = 0
         myprice = 0
         mycost = 0
         fbafees = 0
@@ -88,10 +88,10 @@ class ProductsTableModel(QSqlRelationalTableModel):
             q.exec_()
 
             # Grab values that we don't want to overwrite
-            q.exec_("SELECT Watched, MyPrice, MyCost, FBAFees, MonthlyVolume FROM Products WHERE Asin='{}'".format(
+            q.exec_("SELECT Tracking, MyPrice, MyCost, FBAFees, MonthlyVolume FROM Products WHERE Asin='{}'".format(
                 listing.asin))
             q.first()
-            watched = q.value(0)
+            tracking = q.value(0)
             myprice = q.value(1)
             mycost = q.value(2)
             fbafees = q.value(3)
@@ -110,12 +110,12 @@ class ProductsTableModel(QSqlRelationalTableModel):
         time = QDateTime.currentDateTimeUtc().toTime_t()
 
         q.prepare(
-            'INSERT OR REPLACE INTO Products(Watched, CRank, Timestamp, Asin, ProductGroupId, CategoryId, SalesRank, Offers,'
+            'INSERT OR REPLACE INTO Products(Tracking, CRank, Timestamp, Asin, ProductGroupId, CategoryId, SalesRank, Offers,'
             'Prime, Price, Merchant, Title, Url, PrivateLabel, Manufacturer, PartNumber, Weight, ItemLength,'
             'ItemWidth, ItemHeight, MyPrice, MyCost, FBAFees, MonthlyVolume, UPC) '
             'VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
 
-        fields = [watched, crank, time, listing.asin, productgroupId, categoryId, listing.salesrank, listing.offers,
+        fields = [tracking, crank, time, listing.asin, productgroupId, categoryId, listing.salesrank, listing.offers,
                   listing.prime, listing.price, listing.merchant, listing.title, listing.url, privatelabel,
                   listing.make, listing.model, listing.weight / 100, listing.length / 100,
                   listing.width / 100, listing.height / 100, myprice, mycost, fbafees, monthlyvolume, listing.upc]

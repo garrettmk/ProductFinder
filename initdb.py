@@ -9,7 +9,7 @@ def setupDatabaseTables():
     # Create the tables
     q = QSqlQuery()
     q.exec_('CREATE TABLE IF NOT EXISTS Products('
-               'Watched BOOL DEFAULT 0, '
+               'Tracking INT DEFAULT 0, '
                'CRank INT, '
                'Timestamp INT, '
                'Asin VARCHAR PRIMARY KEY, '
@@ -25,6 +25,7 @@ def setupDatabaseTables():
                'PrivateLabel BOOL, '
                'Manufacturer VARCHAR, '
                'PartNumber VARCHAR, '
+               'UPC INT, '
                'MyPrice FLOAT, '
                'MyCost FLOAT,'
                'FBAFees FLOAT, '
