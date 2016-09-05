@@ -25,6 +25,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         with open('config.json') as configfile:
             self.config = json.load(configfile)
 
+        # Set up the update timers
+        self.trackingLevels = {0: 0,  # No tracking
+                               1: 60 * 60,  # One hour
+                               2: 60 * 60 * 2,  # Two hours
+                               3: 60 * 60 * 3,  # Three hours
+                               4: 60 * 60 * 6}  # Six hours
+
         # Initialize the various components
         self.initDatabase()
         self.initAmazonSearchEngine()
@@ -58,13 +65,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.productsTable.selectRow(0)
         self.showHistoryGraph()
 
-        # Set up the update timers
-        self.trackingLevels = {0: 0,                # No tracking
-                                  1: 60 * 60,       # One hour
-                                  2: 60 * 60 * 2,   # Two hours
-                                  3: 60 * 60 * 3,   # Three hours
-                                  4: 60 * 60 * 6}   # Six hours
 
+        # Set up the tracking timers
         self.trackingTimers = {}
         now = QDateTime.currentDateTimeUtc().toTime_t()
 
