@@ -53,6 +53,7 @@ def setupDatabaseTables():
                'SalesRank INT, '
                'Offers INT, '
                'Prime BOOL, '
+               'MerchantId'
                'Price FLOAT, '
                'FOREIGN KEY(Asin) REFERENCES Products(Asin) ON DELETE CASCADE)')
 

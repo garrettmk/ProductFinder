@@ -59,12 +59,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.showHistoryGraph()
 
         # Set up the update timers
-        self.trackingLevels = {0: 0,  # No tracking
-                                  1: 60 * 30,  # Half an hour
-                                  2: 60 * 60,  # One hour
-                                  3: 60 * 60 * 3,  # Three hours
-                                  4: 60 * 60 * 6,  # Six hours
-                                  5: 60 * 5}       # Five minutes
+        self.trackingLevels = {0: 0,                # No tracking
+                                  1: 60 * 60,       # One hour
+                                  2: 60 * 60 * 2,   # Two hours
+                                  3: 60 * 60 * 3,   # Three hours
+                                  4: 60 * 60 * 6}   # Six hours
 
         self.trackingTimers = {}
         now = QDateTime.currentDateTimeUtc().toTime_t()
@@ -139,7 +138,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         yesno = YesNoComboDelegate(self)
         tolocaltime = TimestampToLocalDelegate(self)
         levels = TrackingLevelDelegate(self)
-        levels.setLevels(5)
+        levels.setLevels(len(self.trackingLevels))
 
         for column in map(self.productsModel.fieldIndex, ['CRank', 'SalesRank', 'Offers']):
             self.productsTable.setItemDelegateForColumn(column, numbers)
