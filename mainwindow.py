@@ -26,11 +26,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.config = json.load(configfile)
 
         # Set up the update timers
-        self.trackingLevels = {0: 0,  # No tracking
-                               1: 60 * 60,  # One hour
-                               2: 60 * 60 * 2,  # Two hours
-                               3: 60 * 60 * 3,  # Three hours
-                               4: 60 * 60 * 6}  # Six hours
+        self.trackingLevels = {int(k):int(v) for k,v in self.config['tracking'].items()}
 
         # Initialize the various components
         self.initDatabase()
