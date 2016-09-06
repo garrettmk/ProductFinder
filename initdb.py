@@ -61,6 +61,15 @@ def setupDatabaseTables():
                'Price FLOAT, '
                'FOREIGN KEY(Asin) REFERENCES Products(Asin) ON DELETE CASCADE)')
 
+    # Create a view for accessing product history
+    q.exec_('CREATE VIEW IF NOT EXITS ProductHistory AS '
+            'SELECT Asin, Timestamp, SalesRank, Offers, Prime, Price, Merchants.MerchantName '
+            'FROM Products LEFT OUTER JOIN Merchants ON Products.MerchantId = Merchants.MerchantId '
+            'UNION '
+            'SELECT Asin, Timestamp, SalesRank, Offers, Prime, Price, Merchants.MerchantName '
+            'FROM Observations LEFT OUTER JOIN Merchants ON Observations.MerchantId = Merchants.MerchantId '
+            'ORDER BY Timestamp DESC')
+
     # Insert a default category
     q.prepare('INSERT OR IGNORE INTO Categories(CategoryName) VALUES("Unknown")')
 

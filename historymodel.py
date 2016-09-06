@@ -1,36 +1,23 @@
-import logging
-
 from PyQt5.QtSql import *
 
 
-class ProductHistoryModel(QSqlRelationalTableModel):
+class ProductHistoryModel(QSqlTableModel):
 
     def __init__(self, parent = None, asin = ''):
         super(ProductHistoryModel, self).__init__(parent)
+        self.setTable('ProductHistory')
         self.modelReset.connect(self.fetchAll)
         self.setProduct(asin)
 
     def setProduct(self, asin):
         """Populate the model with the history data of the specified ASIN."""
         self.productId = asin
+        self.setFilter('Asin=\'{}\''.format(asin))
+        if not self.rowCount():
+            self.select()
 
-        fields = 'Timestamp, SalesRank, Offers, Prime, Price, Merchants.MerchantName'
-        join = 'LEFT OUTER JOIN Merchants ON {}.MerchantId = Merchants.MerchantId'
-
-        query = 'SELECT ' + fields + ' FROM ' + ' Products ' + join.format('Products') + ' WHERE Asin=\'{}\''.format(asin)
-        query += ' UNION '
-        query += 'SELECT ' + fields + ' FROM ' + ' Observations ' + join.format('Observations') + ' WHERE Asin=\'{}\''.format(asin)
-        query += ' ORDER BY Timestamp DESC'
-
-        q = QSqlQuery(query)
-
-        if q.lastError().type() != QSqlError.NoError:
-            logging.debug('ProductHistoryModel: Could not select \'{}\' from database. Error message: \'{}\''.format(asin, q.lastError().text()))
-            return False
-
-        self.setQuery(q)
         if self.lastError().type() != QSqlError.NoError:
-            logging.debug('ProductHistoryModel: Could not set query. Error message: \'{}\''.format(self.lastError().text()))
+            print('ProductHistoryModel: Could not set product.')
             return False
 
         return True
