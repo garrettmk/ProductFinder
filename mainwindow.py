@@ -185,6 +185,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.productsTable.selectionModel().currentRowChanged.connect(self.updateHistoryView)
         self.historyTable.setContextMenuPolicy(Qt.CustomContextMenu)
         self.historyTable.customContextMenuRequested.connect(self.chooseHistoryViewMenu)
+        self.historyModel.modelReset.connect(self.historyTable.resizeColumnsToContents)
 
     def initCategoriesDialog(self):
         # Set up the models

@@ -19,7 +19,7 @@ def setupDatabaseTables():
                'Offers INT, '
                'Prime BOOL, '
                'Price FLOAT, '
-               'Merchant VARCHAR, '
+               'MerchantId INT, '
                'Title VARCHAR, '
                'Url VARCHAR, '
                'PrivateLabel BOOL, '
@@ -46,6 +46,10 @@ def setupDatabaseTables():
                'ProductGroupId INTEGER PRIMARY KEY, '
                'ProductGroupName VARCHAR UNIQUE, '
                'CategoryId INT DEFAULT 1)')
+
+    q.exec_('CREATE TABLE IF NOT EXISTS Merchants('
+            'MerchantId INT PRIMARY KEY, '
+            'MerchantName VARCHAR UNIQUE NOT NULL)')
 
     q.exec_('CREATE TABLE IF NOT EXISTS Observations('
                'Asin VARCHAR, '

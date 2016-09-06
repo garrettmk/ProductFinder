@@ -1,3 +1,5 @@
+import re
+
 from PyQt5.QtCore import *
 from PyQt5.QtSql import *
 
@@ -15,6 +17,7 @@ class ProductsTableModel(QSqlRelationalTableModel):
         # Set up relations
         self.setRelation(self.fieldIndex('CategoryId'), QSqlRelation('Categories', 'CategoryId', 'CategoryName'))
         self.setRelation(self.fieldIndex('ProductGroupId'), QSqlRelation('ProductGroups', 'ProductGroupId', 'ProductGroupName'))
+        self.setRelation(self.fieldIndex('MerchantId'), QSqlRelation('Merchants', 'MerchantId', 'MerchantName'))
 
         # Populate the model
         self.select()
@@ -65,6 +68,15 @@ class ProductsTableModel(QSqlRelationalTableModel):
         q.first()
 
         categoryId = q.value(0)
+
+        # Add the merchant name
+        merchname = re.sub(r"'", "\'\'", listing.merchant)                      # SQL uses two single quotes to escape a single quote...
+        q.exec_("INSERT OR IGNORE INTO Merchants(MerchantName) VALUES('{}')".format(merchname))
+        q.exec_("SELECT MerchantId FROM Merchants WHERE MerchantName='{}'".format(merchname))
+        q.first()
+
+        merchantId = q.value(0)
+
         tracking = 0
         myprice = 0
         mycost = 0
@@ -77,14 +89,15 @@ class ProductsTableModel(QSqlRelationalTableModel):
         if q.isValid():
             record = q.record()
             # The listing is already in the database. Add it's current values to the observation table
-            q.prepare("INSERT INTO Observations(Asin, Timestamp, SalesRank, Offers, Prime, Price) "
-                       "VALUES(?, ?, ?, ?, ?, ?)")
+            q.prepare("INSERT INTO Observations(Asin, Timestamp, SalesRank, Offers, Prime, Price, MerchantId) "
+                       "VALUES(?, ?, ?, ?, ?, ?, ?)")
             q.addBindValue(record.value('Asin'))
             q.addBindValue(record.value('Timestamp'))
             q.addBindValue(record.value('SalesRank'))
             q.addBindValue(record.value('Offers'))
             q.addBindValue(record.value('Prime'))
             q.addBindValue(record.value('Price'))
+            q.addBindValue(record.value('MerchantId'))
             q.exec_()
 
             # Grab values that we don't want to overwrite
@@ -111,12 +124,12 @@ class ProductsTableModel(QSqlRelationalTableModel):
 
         q.prepare(
             'INSERT OR REPLACE INTO Products(Tracking, CRank, Timestamp, Asin, ProductGroupId, CategoryId, SalesRank, Offers,'
-            'Prime, Price, Merchant, Title, Url, PrivateLabel, Manufacturer, PartNumber, Weight, ItemLength,'
+            'Prime, Price, MerchantId, Title, Url, PrivateLabel, Manufacturer, PartNumber, Weight, ItemLength,'
             'ItemWidth, ItemHeight, MyPrice, MyCost, FBAFees, MonthlyVolume, UPC) '
             'VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
 
         fields = [tracking, crank, time, listing.asin, productgroupId, categoryId, listing.salesrank, listing.offers,
-                  listing.prime, listing.price, listing.merchant, listing.title, listing.url, privatelabel,
+                  listing.prime, listing.price, merchantId, listing.title, listing.url, privatelabel,
                   listing.make, listing.model, listing.weight / 100, listing.length / 100,
                   listing.width / 100, listing.height / 100, myprice, mycost, fbafees, monthlyvolume, listing.upc]
 
