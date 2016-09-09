@@ -115,6 +115,16 @@ class ProductHistoryChart(QChart):
         self.offerPoints.attachAxis(self.timeAxis)
         self.offerPoints.setPointsVisible(True)
 
+        self.salesPoints = QScatterSeries()
+        self.addSeries(self.salesPoints)
+        self.salesPoints.setColor(rcolor)
+        self.salesPoints.setMarkerSize(8)
+        self.salesPoints.setPen(QPen(pcolor, Qt.DashLine))
+        self.salesPoints.attachAxis(self.rankAxis)
+        self.salesPoints.attachAxis(self.timeAxis)
+        self.salesPoints.setPointsVisible(True)
+
+
         # Chart set-up
         self.legend().hide()
         self.setFlags(QGraphicsItem.ItemIsFocusable | QGraphicsItem.ItemIsSelectable)
@@ -123,6 +133,7 @@ class ProductHistoryChart(QChart):
         self.rankPoints.hovered.connect(self.seriesHovered)
         self.pricePoints.hovered.connect(self.seriesHovered)
         self.offerPoints.hovered.connect(self.seriesHovered)
+        self.salesPoints.hovered.connect(self.seriesHovered)
 
         self.timeAxis.minChanged.connect(self.loadHistoryAfter)
 
@@ -153,7 +164,7 @@ class ProductHistoryChart(QChart):
             timestamp = QDateTime.fromMSecsSinceEpoch(point.x()).toString('M/d H:mm')
 
             series = self.sender()
-            if series is self.rankPoints:
+            if series is self.rankPoints or series is self.salesPoints:
                 value = 'Rank: {:,}'.format(int(point.y()))
             elif series is self.pricePoints:
                 value = 'Price: ${:,.2f}'.format(point.y())
@@ -184,6 +195,7 @@ class ProductHistoryChart(QChart):
         self.pricePoints.clear()
         self.offerLine.clear()
         self.offerPoints.clear()
+        self.salesPoints.clear()
 
         last = self.model.record(0).value('Timestamp')
         if last:
@@ -197,17 +209,6 @@ class ProductHistoryChart(QChart):
         if not self.model.rowCount():
             self.avgpointspan = 0
             return
-
-        # Get the timestamp of the last data point in the series
-        if self.rankPoints.count():
-            last = self.rankPoints.at(self.rankPoints.count() - 1).x()
-        else:
-            last = QDateTime.currentDateTime().toMSecsSinceEpoch()
-
-        # Calculate the earliest timestamp already in the series, in seconds
-        earliest = QDateTime.fromMSecsSinceEpoch(last, Qt.LocalTime)
-        earliest = earliest.toTimeSpec(Qt.UTC)
-        earliest = earliest.toTime_t()
 
         # Calculate the cutoff timestamp in seconds
         cutoff = cutoff.toTimeSpec(Qt.UTC)
@@ -236,6 +237,21 @@ class ProductHistoryChart(QChart):
                 self.offerLine.append(prev.x(), record.value('Offers'))
 
             self.offerLine.append(time, record.value('Offers'))
+
+            if row:
+                lastrec = self.model.record(row-1)
+                s1 = record.value('SalesRank')
+                t1 = record.value('Timestamp')
+                s2 = lastrec.value('SalesRank')
+                t2 = lastrec.value('Timestamp')
+
+                try:
+                    m = (s1 - s2) / (s1 * (t2 - t1)) * 1000
+                except:
+                    continue
+
+                if round(m, 2) > .02:
+                    self.salesPoints.append(self.rankPoints.at(row-1))
 
         # Calculate the average span of time between each data point
         points = self.rankPoints.pointsVector()
