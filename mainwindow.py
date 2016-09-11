@@ -417,7 +417,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             conditions.append('Tracking > 0')
 
         if self.withKeywordsLine.text():
-            conditions.append("INSTR(LOWER(Title), LOWER('{}'))".format(self.withKeywordsLine.text()))
+            for keyword in self.withKeywordsLine.text().split():
+                conditions.append("INSTR(LOWER(Title), LOWER('{}'))".format(keyword))
 
         if self.withoutKeywordsLine.text():
             conditions.append("NOT INSTR(LOWER(Title), LOWER('{}'))".format(self.withoutKeywordsLine.text()))
@@ -426,7 +427,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             conditions.append('Prime=0')
 
         if self.amazonCheck.checkState() == Qt.Unchecked:
-            conditions.append("NOT INSTR(LOWER(Merchant), 'amazon')")
+            conditions.append("NOT INSTR(LOWER(MerchantName), 'amazon')")
 
         if self.privateLabelCheck.checkState() == Qt.Unchecked:
             conditions.append("PrivateLabel=0")
