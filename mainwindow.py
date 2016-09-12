@@ -421,7 +421,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 conditions.append("INSTR(LOWER(Title), LOWER('{}'))".format(keyword))
 
         if self.withoutKeywordsLine.text():
-            conditions.append("NOT INSTR(LOWER(Title), LOWER('{}'))".format(self.withoutKeywordsLine.text()))
+            for keyword in self.withoutKeywordsLine.text().split():
+                conditions.append("NOT INSTR(LOWER(Title), LOWER('{}'))".format(keyword))
 
         if self.primeCheck.checkState() == Qt.Unchecked:
             conditions.append('Prime=0')
